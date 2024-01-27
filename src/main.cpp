@@ -7,6 +7,9 @@
 #include <zephyr/sys/util.h>
 #include <zephyr/usb/usb_device.h>
 
+#include "nci.h"
+#include "util.h"
+
 static const struct gpio_dt_spec btn_user1 = GPIO_DT_SPEC_GET(DT_NODELABEL(btn_user1), gpios);
 static const struct gpio_dt_spec btn_user2 = GPIO_DT_SPEC_GET(DT_NODELABEL(btn_user2), gpios);
 
@@ -43,67 +46,6 @@ int serial_init() {
         uart_line_ctrl_get(usb_device, UART_LINE_CTRL_DTR, &dtr);
         k_sleep(K_MSEC(100));
     }
-
-    return 0;
-}
-
-void hexdump(const uint8_t *buf, uint32_t len) {
-    for (int i = 0; i < len; i++) {
-        printf("%02x", buf[i]);
-        if (i < len - 1) {
-            printf(":");
-        }
-    }
-}
-
-void hexdump(const char *prefix, const uint8_t *buf, uint32_t len) {
-    fputs(prefix, stdout);
-    hexdump(buf, len);
-}
-
-// returns the expected overall length of an NCI packet according to packet header
-size_t expected_packet_length(const uint8_t *packet) {
-    return 3 + packet[2];
-}
-
-int nci_write(const struct i2c_dt_spec *dev, const uint8_t *cmd) {
-    int ret = i2c_write_dt(dev, cmd, expected_packet_length(cmd));
-    if (ret) {
-        printf("i2c_write_dt: %i\n", ret);
-        return ret;
-    }
-    hexdump("> ", cmd, expected_packet_length(cmd));
-    puts("");
-    return 0;
-}
-
-int nci_read(const struct i2c_dt_spec *dev, uint8_t *resp_buf, size_t resp_read_len) {
-    int ret = i2c_read_dt(dev, resp_buf, resp_read_len);
-    if (ret) {
-        printf("i2c_read_dt: %i\n", ret);
-        return ret;
-    }
-    hexdump("< ", resp_buf, expected_packet_length(resp_buf));
-    puts("");
-    return 0;
-}
-
-int nci_write_read(const struct i2c_dt_spec *dev, const uint8_t *cmd, uint8_t *resp_buf, size_t resp_read_len) {
-    int ret = 0;
-
-    ret = nci_write(dev, cmd);
-    if (ret)
-        return ret;
-
-    // TODO parametrize nfcc_irq
-    // TODO? read on interrupt instead of polling?
-    while (gpio_pin_get_dt(&nfcc_irq) == 0) {
-        k_sleep(K_MSEC(50));
-    }
-
-    ret = nci_read(dev, resp_buf, resp_read_len);
-    if (ret)
-        return ret;
 
     return 0;
 }
@@ -306,19 +248,19 @@ int main(void) {
     // yippie, working i2c!
 
     const uint8_t CORE_RESET_CMD[] = {0x20, 0x00, 1, 1}; // CORE_RESET_CMD(0x01), reset config
-    nci_write_read(&pn7150, CORE_RESET_CMD, read_buf, 255);
+    nci_write_read(&pn7150, &nfcc_irq, CORE_RESET_CMD, read_buf, 255);
 
     const uint8_t CORE_INIT_CMD[] = {0x20, 0x01, 0};
-    nci_write_read(&pn7150, CORE_INIT_CMD, read_buf, 255);
+    nci_write_read(&pn7150, &nfcc_irq, CORE_INIT_CMD, read_buf, 255);
 
     const uint8_t PROP_ACT_CMD[] = {0x2f, 0x02, 0};
-    nci_write_read(&pn7150, PROP_ACT_CMD, read_buf, 255);
+    nci_write_read(&pn7150, &nfcc_irq, PROP_ACT_CMD, read_buf, 255);
 
     // RF_DISCOVER_MAP_CMD 4 bytes, 1 mapping, 0x04: PROTOCOL_ISO_DEP, 0b10: map RF interface in listen mode,
     // 0x02: ISO-DEP RF Interface
     // -- according to chapter 7 in user manual
     const uint8_t RF_DISCOVER_MAP_CMD[] = "\x21\x00\x04\x01\x04\x02\x02";
-    nci_write_read(&pn7150, RF_DISCOVER_MAP_CMD, read_buf, 255);
+    nci_write_read(&pn7150, &nfcc_irq, RF_DISCOVER_MAP_CMD, read_buf, 255);
 
     uint8_t NFCB_CORE_CONFIG[] = {
         0x20, 0x02, 0x1c,                   // CORE_SET_CONFIG_CMD NOTICE: packet length is set dynamically!
@@ -332,7 +274,7 @@ int main(void) {
         0x5a, 0x00                          // LI_B_H_INFO_RESP
     };
     NFCB_CORE_CONFIG[2] = sizeof(NFCB_CORE_CONFIG) - 3;
-    nci_write_read(&pn7150, NFCB_CORE_CONFIG, read_buf, 255);
+    nci_write_read(&pn7150, &nfcc_irq, NFCB_CORE_CONFIG, read_buf, 255);
 
     uint8_t NFCB_ROUTING_TABLE[] = {
         0x21, 0x01, 0x00, 0x00, // TODO Command annotation NOTICE: packet length calculated dynamically
@@ -343,10 +285,10 @@ int main(void) {
         0x01, 0x03, 0x00, 0x3f, 0x04 // Proto: ISO-DEP
     };
     NFCB_ROUTING_TABLE[2] = sizeof(NFCB_ROUTING_TABLE) - 3;
-    nci_write_read(&pn7150, NFCB_ROUTING_TABLE, read_buf, 255);
+    nci_write_read(&pn7150, &nfcc_irq, NFCB_ROUTING_TABLE, read_buf, 255);
 
     const uint8_t RF_DISCOVER_CMD_NFCB[] = {0x21,0x03,0x03,0x01,0x81,0x01}; // # RF_DISCOVER_CMD in B mode
-    nci_write_read(&pn7150, RF_DISCOVER_CMD_NFCB, read_buf, 255);
+    nci_write_read(&pn7150, &nfcc_irq, RF_DISCOVER_CMD_NFCB, read_buf, 255);
 
     puts("Reached end.");
     while (true) {
