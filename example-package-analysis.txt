@@ -1,0 +1,98 @@
+--- LOG ---
+
+*** Booting Zephyr OS build zephyr-v3.5.0-4683-g4c5a96ec6515 ***
+Got User Button 1.
+Got User Button 2.
+Got User LED 0.
+Got User LED 1.
+Got User LED 2.
+Got NFCC's VEN.
+Got NFCC's IRQ.
+Set NFCC's VEN config.
+Set NFCC's IRQ config.
+Set NFCC's VEN to ACTIVE.
+Got I2C controller device.
+Got PN7150 dt spec.
+i2c_is_ready: true
+i2c_configure: 0
+I2C config set successfully.
+i2c_get_config: -88
+Config get not supported. (ENOSYS returned)
+> 20:00:01:01
+< 40:00:03:00:11:01
+> 20:01:00
+< 40:01:19:00:03:1e:03:00:08:00:01:02:03:80:81:82:83:02:d0:02:ff:02:00:04:88:10:01:a0
+> 2f:02:00
+< 4f:02:05:00:00:00:9f:97
+> 21:00:04:01:04:02:02
+< 41:00:01:00
+> 20:02:1b:07:38:01:00:39:04:13:37:70:07:3a:04:00:00:00:00:3b:01:00:3c:01:05:3e:01:06:5a:00
+< 40:02:03:09:01:3e
+> 21:01:12:00:02:02:09:00:3f:d2:76:00:00:85:01:01:01:03:00:3f:04
+< 41:01:01:00
+> 21:03:03:01:81:01
+< 41:03:01:00
+Reached end.
+# holding my mobile within reach...
+< 61:05:14:01:02:04:81:ff:01:00:81:00:00:09:08:13:37:70:07:00:08:01:00
+< 61:06:02:01:01
+< 61:06:02:03:02
+
+# ... later on within another connection
+< 00:00:0d:00:a4:04:00:07:d2:76:00:00:85:01:01:00
+
+--- ANALYSIS ---
+
+< 61:05:14:01:02:04:81:ff:01:00:81:00:00:09:08:13:37:70:07:00:08:01:00
+
+61:06 - RF_INTF_ACTIVATED_NTF ([NCI] Table 80)
+0d20 - payload length (20)
+01 - discovery id (dynamically assigned)
+02 - rf interface (ISO-DEP RF Interface)
+04 - rf protocol (PROTOCOL_ISO_DEP)
+81 - activation rf technology & mode (NFC_B_PASSIVE_LISTEN_MODE)
+ff - max data payload packet size (255)
+01 - initial number of credits (1)
+00 - length of rf technology specific params (0)
+-- no params --
+81 - data exchange rf technology & mode (NFC_B_PASSIVE_LISTEN_MODE)
+00 - data exchange transmit bit rate (106 Kbit/s)
+00 - data exchange receive bit rate (106 Kbit/s)
+09 - length of activation parameters
+-- activation parameters (table 98) --
+08 - ATTRIB command length
+-- ATTRIB command as defined in [DIGITAL] -> [12.6.1] page 119 --
+-- missing a 0x1D here... --
+13:37:70:07 - NFCID0
+00 - param 1 - TR0 default, TR1 default, EoS required, SoS required - TODO interpret
+08 - param 2 - bit rate listen->poll 00b, bit rate poll->listen 00b, FSDI 8 - TODO interpret 
+01 - param 3 - minimum TR2 00b, NFC Forum Device in Listen Mode compliant with [ISO/IEC_14443] 
+00 - param 4 - DID 0000b 
+
+
+< 61:06:02:01:01
+
+61:06 - RF_DEACTIVATE_NTF
+2 - payload length
+01 - type 
+01 - reason
+
+
+< 61:06:02:03:02
+
+61:06 - RF_DEACTIVATE_NTF
+2 - payload length
+03 - type
+02 - reason
+
+
+< 00:00:0d:00:a4:04:00:07:d2:76:00:00:85:01:01:00
+
+00:00 - data packet
+        mt: 000 b - data packet
+        pbf: 0 b
+        conn id: 0000 b - static rf connection between dh and remote nfc endpoint
+        credits: 00 b
+0d - payload length (13 d)
+00:a4:04:00:07:d2:76:00:00:85:01:01 - TODO 
+00 - status? (-> [NCI Table 108]) (if so - NDEF_OPERATION_SUCCEEDED -> [NCI Table 109])
