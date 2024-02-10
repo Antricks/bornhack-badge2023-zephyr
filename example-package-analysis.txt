@@ -94,5 +94,8 @@ ff - max data payload packet size (255)
         conn id: 0000 b - static rf connection between dh and remote nfc endpoint
         credits: 00 b
 0d - payload length (13 d)
-00:a4:04:00:07:d2:76:00:00:85:01:01 - TODO 
-00 - status? (-> [NCI Table 108]) (if so - NDEF_OPERATION_SUCCEEDED -> [NCI Table 109])
+00:a4:04:00:07:d2:76:00:00:85:01:01:00
+    do I have to apply [NCI] table 106 (dh->nfcc) or table 108 (nfcc->dh)?
+    I mean it's obviously coming from the nfcc, but a command like NDEF_OPERATION_GET
+    would make sense here (which it would be then according to the coresponding table)
+    - [NCI 9.1.3.1] seems promising too. I should really read chapters 8&9...

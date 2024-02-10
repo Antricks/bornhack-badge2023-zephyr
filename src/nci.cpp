@@ -1,4 +1,3 @@
-#pragma once
 #include <zephyr/drivers/i2c.h>
 #include <zephyr/drivers/gpio.h>
 #include "util.h"
@@ -38,7 +37,6 @@ int nci_write_read(const struct i2c_dt_spec *dev, const struct gpio_dt_spec* nfc
         return ret;
 
     // TODO parametrize nfcc_irq
-    // TODO? read on interrupt instead of polling?
     while (gpio_pin_get_dt(nfcc_irq) == 0) {
         k_sleep(K_MSEC(50));
     }

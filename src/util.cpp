@@ -1,4 +1,3 @@
-#pragma once
 #include <zephyr/kernel.h>
 
 void hexdump(const uint8_t *buf, uint32_t len) {

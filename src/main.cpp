@@ -1,7 +1,9 @@
 #include <string.h>
 #include <zephyr/device.h>
+#include <zephyr/devicetree.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/i2c.h>
+#include <zephyr/drivers/pwm.h>
 #include <zephyr/drivers/uart.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/util.h>
@@ -10,8 +12,14 @@
 #include "nci.h"
 #include "util.h"
 
+#define WAIT_FOR_SERIAL 1
+
 static const struct gpio_dt_spec btn_user1 = GPIO_DT_SPEC_GET(DT_NODELABEL(btn_user1), gpios);
 static const struct gpio_dt_spec btn_user2 = GPIO_DT_SPEC_GET(DT_NODELABEL(btn_user2), gpios);
+
+static const struct pwm_dt_spec pwm_led_user0 = PWM_DT_SPEC_GET(DT_NODELABEL(pwm_led0));
+static const struct pwm_dt_spec pwm_led_user1 = PWM_DT_SPEC_GET(DT_NODELABEL(pwm_led1));
+static const struct pwm_dt_spec pwm_led_user2 = PWM_DT_SPEC_GET(DT_NODELABEL(pwm_led2));
 
 static const struct gpio_dt_spec led_user0 = GPIO_DT_SPEC_GET(DT_NODELABEL(led0), gpios);
 static const struct gpio_dt_spec led_user1 = GPIO_DT_SPEC_GET(DT_NODELABEL(led_user1), gpios);
@@ -24,7 +32,6 @@ static const struct device *i2c_dev = DEVICE_DT_GET(DT_NODELABEL(i2c0));
 static const struct i2c_dt_spec pn7150 = I2C_DT_SPEC_GET(DT_NODELABEL(pn7150));
 
 static uint8_t read_buf[256] = {0}; // read buffer for i2c
-static bool read_nci_on_irq = false;
 
 BUILD_ASSERT(DT_NODE_HAS_COMPAT(DT_CHOSEN(zephyr_console), zephyr_cdc_acm_uart), "Device is not ACM CDC UART device");
 
@@ -38,14 +45,14 @@ int serial_init() {
         return 1;
     }
 
-    /* Wait for a console connection, if the DTR flag was set to activate USB.
-     * If you wish to start generating serial data immediately, you can simply
-     * remove the while loop, to not wait until the control line is set.
-     */
+    uart_line_ctrl_get(usb_device, UART_LINE_CTRL_DTR, &dtr);
+#if WAIT_FOR_SERIAL
+    // TODO for some reason main does not print to stdout after some time if I don't do this. No clue why... ._.
     while (!dtr) {
         uart_line_ctrl_get(usb_device, UART_LINE_CTRL_DTR, &dtr);
         k_sleep(K_MSEC(100));
     }
+#endif
 
     return 0;
 }
@@ -62,14 +69,8 @@ void nfcc_irq_handler(const struct device *dev, struct gpio_callback *cb, uint32
     fputs("+++ IRQ", stdout);
     int irq_val = gpio_pin_get_dt(&nfcc_irq);
     printf("=%i +++\n", irq_val);
-    gpio_pin_set_dt(&led_user2, irq_val);
 
-    // TODO this should probably be a while loop
-    if (read_nci_on_irq && irq_val) {
-        puts("reading from interrupt...");
-        // TODO this seems to fail (does not terminate)
-        nci_read(&pn7150, read_buf, 255);
-    }
+    gpio_pin_set_dt(&led_user2, irq_val);
 }
 
 int main(void) {
@@ -100,9 +101,15 @@ int main(void) {
 
     ret = gpio_pin_configure_dt(&btn_user1, GPIO_INPUT | GPIO_PULL_UP);
     ret = gpio_pin_configure_dt(&btn_user2, GPIO_INPUT | GPIO_PULL_UP);
+    // TODO handle errors here
 
     // END Buttons
     // BEGIN LEDs
+
+    // ret = gpio_pin_configure(led_user0.port, led_user0.pin, GPIO_OUTPUT);
+    ret = gpio_pin_configure(led_user1.port, led_user1.pin, GPIO_OUTPUT);
+    ret = gpio_pin_configure(led_user2.port, led_user2.pin, GPIO_OUTPUT);
+    // TODO handle errors here
 
     ret = (!device_is_ready(led_user0.port));
     if (ret) {
@@ -128,9 +135,25 @@ int main(void) {
         puts("Got User LED 2.");
     }
 
-    ret = gpio_pin_configure(led_user0.port, led_user0.pin, GPIO_OUTPUT);
-    ret = gpio_pin_configure(led_user1.port, led_user1.pin, GPIO_OUTPUT);
-    ret = gpio_pin_configure(led_user2.port, led_user2.pin, GPIO_OUTPUT);
+    if (!pwm_is_ready_dt(&pwm_led_user0)) {
+        printk("Error: PWM device %s is not ready\n", pwm_led_user0.dev->name);
+        return 0;
+    } else {
+        puts("Got User LED 0 PWM.");
+    }
+    if (!pwm_is_ready_dt(&pwm_led_user1)) {
+        printk("Error: PWM device %s is not ready\n", pwm_led_user1.dev->name);
+        return 0;
+    } else {
+        puts("Got User LED 1 PWM.");
+    }
+
+    if (!pwm_is_ready_dt(&pwm_led_user2)) {
+        printk("Error: PWM device %s is not ready\n", pwm_led_user2.dev->name);
+        return 0;
+    } else {
+        puts("Got User LED 2 PWM.");
+    }
 
     // END LEDs
     // BEGIN NFCC flags
@@ -263,13 +286,13 @@ int main(void) {
     nci_write_read(&pn7150, &nfcc_irq, RF_DISCOVER_MAP_CMD, read_buf, 255);
 
     uint8_t NFCB_CORE_CONFIG[] = {
-        0x20, 0x02, 0x1c,                   // CORE_SET_CONFIG_CMD NOTICE: packet length is set dynamically!
+        0x20, 0x02, 0x1b,                   // CORE_SET_CONFIG_CMD NOTICE: packet length is set dynamically!
         7,                                  // number of config entries
-        0x38, 0x01, 0x00,                   // LB_SENSB_INFO - no support for both
+//        0x38, 0x01, 0x00,                   // LB_SENSB_INFO - no support for both
         0x39, 0x04, 0x13, 0x37, 0x70, 0x07, // LB_NFCID0
-        0x3a, 0x04, 0x00, 0x00, 0x00, 0x00, // LB_APPLICATION_DATA
-        0x3b, 0x01, 0x00,                   // LB_SFGI - default value 0
-        0x3c, 0x01, 0x05,                   // LB_FWI_ADC_FO - default value 0x05
+//        0x3a, 0x04, 0x00, 0x00, 0x00, 0x00, // LB_APPLICATION_DATA
+//        0x3b, 0x01, 0x00,                   // LB_SFGI - default value 0
+//        0x3c, 0x01, 0x05,                   // LB_FWI_ADC_FO - default value 0x05
         0x3e, 0x01, 0x06,                   // LB_BIT_RATE
         0x5a, 0x00                          // LI_B_H_INFO_RESP
     };
@@ -287,13 +310,25 @@ int main(void) {
     NFCB_ROUTING_TABLE[2] = sizeof(NFCB_ROUTING_TABLE) - 3;
     nci_write_read(&pn7150, &nfcc_irq, NFCB_ROUTING_TABLE, read_buf, 255);
 
-    const uint8_t RF_DISCOVER_CMD_NFCB[] = {0x21,0x03,0x03,0x01,0x81,0x01}; // # RF_DISCOVER_CMD in B mode
+    const uint8_t RF_DISCOVER_CMD_NFCB[] = {0x21, 0x03, 0x03, 0x01, 0x81, 0x01}; // # RF_DISCOVER_CMD in B mode
     nci_write_read(&pn7150, &nfcc_irq, RF_DISCOVER_CMD_NFCB, read_buf, 255);
 
-    puts("Reached end.");
+    printf("Reached end.");
+
+    // TODO adjust dynamically based on period from dt
+    uint32_t PWM_MIN_PULSE = PWM_NSEC(5000);
+    uint32_t PWM_MAX_PULSE = PWM_MSEC(1);
+    bool dir = true;
+    uint32_t pulse = PWM_MIN_PULSE;
+
     while (true) {
-        gpio_pin_toggle_dt(&led_user1);
-        k_sleep(K_MSEC(1000));
+        pwm_set_pulse_dt(&pwm_led_user0, pulse);
+        pulse = dir ? pulse / 1.1 : pulse * 1.1;
+        if (dir && pulse < PWM_MIN_PULSE || !dir && pulse > PWM_MAX_PULSE) {
+            dir = !dir;
+        }
+
+        k_sleep(K_MSEC(50));
 
         if (gpio_pin_get_dt(&nfcc_irq)) {
             nci_read(&pn7150, read_buf, 255);

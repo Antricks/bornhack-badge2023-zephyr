@@ -24,6 +24,26 @@
             gpios = <&gpio0 24 GPIO_ACTIVE_HIGH>;
         };
     };
+    
+    pwm_leds {
+		compatible = "pwm-leds";
+		status = "okay";
+		pwm_led0: pwm_led_0 {
+	        status = "okay";
+            label = "PWM LED 0";
+			pwms = <&pwm 9 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
+		};
+		pwm_led1: pwm_led_1 {
+	        status = "okay";
+            label = "PWM LED 1";
+			pwms = <&pwm 13 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
+		};
+		pwm_led2: pwm_led_2 {
+	        status = "okay";
+            label = "PWM LED 2";
+			pwms = <&pwm 24 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
+		};
+	};
 
     gpio_nfcc {
         compatible = "gpio-leds";
@@ -35,6 +55,10 @@
             gpios = <&gpio0 7 GPIO_ACTIVE_HIGH>;
         };
     };
+};
+
+&pwm_led0 {
+    status = "okay";
 };
 
 &zephyr_udc0 {
@@ -54,4 +78,10 @@
     pn7150: pn7150@28 {
         reg = <0x28>;
     };
+};
+
+&pwm {
+	status = "okay";
+	divider-frac-4 = <15>;
+	divider-int-4 = <255>;
 };
