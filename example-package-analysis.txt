@@ -1,23 +1,3 @@
---- LOG ---
-
-*** Booting Zephyr OS build zephyr-v3.5.0-4683-g4c5a96ec6515 ***
-Got User Button 1.
-Got User Button 2.
-Got User LED 0.
-Got User LED 1.
-Got User LED 2.
-Got NFCC's VEN.
-Got NFCC's IRQ.
-Set NFCC's VEN config.
-Set NFCC's IRQ config.
-Set NFCC's VEN to ACTIVE.
-Got I2C controller device.
-Got PN7150 dt spec.
-i2c_is_ready: true
-i2c_configure: 0
-I2C config set successfully.
-i2c_get_config: -88
-Config get not supported. (ENOSYS returned)
 > 20:00:01:01
 < 40:00:03:00:11:01
 > 20:01:00
@@ -94,12 +74,17 @@ ff - max data payload packet size (255)
         conn id: 0000 b - static rf connection between dh and remote nfc endpoint
         credits: 00 b
 0d - payload length (13 d)
-00:a4:04:00:07:d2:76:00:00:85:01:01:00
-    do I have to apply [NCI] table 106 (dh->nfcc) or table 108 (nfcc->dh)?
-    I mean it's obviously coming from the nfcc, but a command like NDEF_OPERATION_GET
-    would make sense here (which it would be then according to the coresponding table)
+ --- applying ISO-DEP format from here ---
+00 - package control byte: I-Block, no chain, no did
+ --- not applying ISO-DEP format from here because I don't have 194CHF (around 205€) lying around to buy ISO/IEC 14443-4... ---
+a4:04:00:07:d2:76:00:00:85:01 - INF, TODO
+01:00 - CRC_B?
 
-    - [NCI 9.1.3.1] seems promising too. I should really read chapters 8&9...
-    
-    I'm currently a bit weirded out by all of this, because the roles of DH and NFCC seem to be switched here.
-    But maybe I'm also just stupid and reading the wrong paragraphs - what do I know...
+Noch ne Anmerkung: Android erzwingt ISO-DEP support für NFC-A, aber nicht für NFC-B wie's scheint.
+Sowas könnte also eventuell weiter verbreitet sein.
+Dementsprechend könnte mich vielleicht eher NFC-A mit NFC-DEP oder sowas interessieren.
+Lesen wir uns mal in die anderen Protokolle rein.
+Vielleicht habe ich mit etwas das nicht ISO ist, chancen da dran zu kommen ohne gottlos Geld blechen zu müssen :')
+
+Also wenn ich die Tabelle 3 in [DIGITAL] richtig lese, müsste ich auch NFC-A oder NFC-F mit T1T-T3T oder NFC-DEP nutzen können.
+Das sollte in den Dokumenten die ich habe spezifiziert sein.

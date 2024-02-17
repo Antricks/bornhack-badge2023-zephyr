@@ -73,6 +73,131 @@ void nfcc_irq_handler(const struct device *dev, struct gpio_callback *cb, uint32
     gpio_pin_set_dt(&led_user2, irq_val);
 }
 
+int nfca_iso_dep_setup() {
+    // RF_DISCOVER_MAP_CMD 4 bytes, 1 mapping, 0x04: PROTOCOL_ISO_DEP, 0b10: map RF interface in listen mode,
+    // 0x02: ISO-DEP RF Interface
+    // -- according to chapter 7 in user manual
+    const uint8_t rf_discover_map_cmd[] = {RF_CMD, RF_DISCOVER_MAP, 4, 1, RF_PROTO_ISO_DEP,
+                                           0x02,   RF_INTF_ISO_DEP}; // 0x02 -> listen mode -> [NCI Table 51]
+    nci_write_read(pn7150, &nfcc_irq, rf_discover_map_cmd, read_buf, 255);
+    //TODO handle response
+
+    uint8_t nfca_core_config[] = {
+        CORE_CMD, CORE_SET_CONFIG, 0, // NOTICE: packet length is set dynamically!
+        4,                            // number of config entries
+        CFG_LA_BIT_FRAME_SDD,1,0x00, // LA_BIT_FRAME_SDD - 4 Byte ID1, 00000b 
+        CFG_LA_PLATFORM_CONFIG,1,0x0c, // LA_PLATFORM_CONFIG - RFU part set to 0, rest set to 1100b 
+        CFG_LA_SEL_INFO,1,0x60, // LA_SEL_INFO = ??
+        CFG_LA_NFCID1,7,0xcc,0xca,0xc,0x13,0x37,0x37,0xc3, // LA_NFCID1 = 0x37c31337
+        //0x59,0x01,0x00, //# LI_A_HIST_BY = 0
+        //0x5b,0x01,0x01, //# LI_A_BIT_RATE = maximum available bitrate 
+    };
+    nfca_core_config[2] = sizeof(nfca_core_config) - 3;
+    nci_write_read(pn7150, &nfcc_irq, nfca_core_config, read_buf, 255);
+    // TODO handle response
+
+    uint8_t nfca_routing_table[] = {
+        RF_CMD, RF_SET_LISTEN_MODE_ROUTING, 0, 0x00, // NOTICE: packet length is set dynamically!
+        3,
+        //0x02,0x07,0x00,0x3f,0x04,0x37,0xc3,0x13,0x37, // Application ID: 0x37c31337
+        0x02,0x0a,0x00,0x3f,0x07,0xd2,0x76,0x00,0x00,0x85,0x01,0x01, // Route: DH, Power state: all on (NOTICE not sure if that's sensible), AID: 0xD2760000850101 (which stands for mapping version 2.0 NDEF Tag application)
+        0x01,0x03,0x00,0x3f,0x04, // Proto: ISO-DEP
+        0x00,0x03,0x00,0x3f,0x00, // Techno: NFC-A 
+    };
+    nfca_routing_table[2] = sizeof(nfca_routing_table) - 3;
+    nci_write_read(pn7150, &nfcc_irq, nfca_routing_table, read_buf, 255);
+    // TODO handle response
+
+    const uint8_t nfca_rf_discover_cmd[] = {RF_CMD, RF_DISCOVER, 3, 1, NFC_A_PASSIVE_LISTEN_MODE, 0x01};
+    nci_write_read(pn7150, &nfcc_irq, nfca_rf_discover_cmd, read_buf, 255);
+    // TODO handle response
+    
+    return 0;
+}
+
+int nfca_nfc_dep_setup() {
+    const uint8_t rf_discover_map_cmd[] = {RF_CMD, RF_DISCOVER_MAP, 4, 1, RF_PROTO_NFC_DEP,
+                                           0x02,   RF_INTF_NFC_DEP}; // 0x02 -> listen mode -> [NCI Table 51]
+    nci_write_read(pn7150, &nfcc_irq, rf_discover_map_cmd, read_buf, 255);
+    //TODO handle response
+
+    uint8_t nfca_core_config[] = {
+        CORE_CMD, CORE_SET_CONFIG, 0, // NOTICE: packet length is set dynamically!
+        1,                            // number of config entries
+        //CFG_LA_BIT_FRAME_SDD,1,0x00, // LA_BIT_FRAME_SDD - 4 Byte ID1, 00000b 
+        //CFG_LA_PLATFORM_CONFIG,1,0x0c, // LA_PLATFORM_CONFIG - RFU part set to 0, rest set to 1100b 
+        //CFG_LA_SEL_INFO,1,0x60, // Still don't know what that does but seems to kinda work in ISO-DEP
+        CFG_LA_NFCID1,7,0xcc,0xca,0xcc,0x13,0x37,0x37,0xc3,
+        //CFG_LN_WT,1,10,
+        //CFG_LN_ATR_RES_GEN_BYTES,0,
+        //CFG_LN_ATR_RES_CONFIG,1,0x30
+    };
+    nfca_core_config[2] = sizeof(nfca_core_config) - 3;
+    nci_write_read(pn7150, &nfcc_irq, nfca_core_config, read_buf, 255);
+    // TODO handle response
+
+    uint8_t nfca_routing_table[] = {
+        RF_CMD, RF_SET_LISTEN_MODE_ROUTING, 0, 0x00, // NOTICE: packet length is set dynamically!
+        3,
+        //0x02,0x07,0x00,0x3f,0x04,0x37,0xc3,0x13,0x37, // Application ID: 0x37c31337
+        0x02,0x0a,0x00,0x3f,0x07,0xd2,0x76,0x00,0x00,0x85,0x01,0x01, // Route: DH, Power state: all on (NOTICE not sure if that's sensible), AID: 0xD2760000850101 (which stands for mapping version 2.0 NDEF Tag application)
+        0x01,0x03,0x00,0x3f,RF_PROTO_NFC_DEP,
+        0x00,0x03,0x00,0x3f,0x00, // Techno: NFC-A 
+    };
+    nfca_routing_table[2] = sizeof(nfca_routing_table) - 3;
+    nci_write_read(pn7150, &nfcc_irq, nfca_routing_table, read_buf, 255);
+    // TODO handle response
+
+    const uint8_t nfca_rf_discover_cmd[] = {RF_CMD, RF_DISCOVER, 3, 1, NFC_A_PASSIVE_LISTEN_MODE, 0x01};
+    nci_write_read(pn7150, &nfcc_irq, nfca_rf_discover_cmd, read_buf, 255);
+    // TODO handle response
+    
+    return 0;
+}
+
+int nfcb_iso_dep_setup() {
+    // RF_DISCOVER_MAP_CMD 4 bytes, 1 mapping, 0x04: PROTOCOL_ISO_DEP, 0b10: map RF interface in listen mode,
+    // 0x02: ISO-DEP RF Interface
+    // -- according to chapter 7 in user manual
+    const uint8_t rf_discover_map_cmd[] = {RF_CMD, RF_DISCOVER_MAP, 4, 1, RF_PROTO_ISO_DEP,
+                                           0x02,   RF_INTF_ISO_DEP}; // 0x02 -> listen mode -> [NCI Table 51]
+    nci_write_read(pn7150, &nfcc_irq, rf_discover_map_cmd, read_buf, 255);
+    // TODO handle response
+
+    uint8_t nfcb_core_config[] = {
+        CORE_CMD, CORE_SET_CONFIG, 0, // NOTICE: packet length is set dynamically!
+        2,                            // number of config entries
+        // CFG_LB_SENS_INFO, 0x01, 0x00,                   // LB_SENSB_INFO - no support for both
+        CFG_LB_NFCID0, 4, 0x13, 0x37, 0x70, 0x07, // LB_NFCID0
+        // CFG_LB_APPLICATION_DATA, 0x04, 0x00, 0x00, 0x00, 0x00, // LB_APPLICATION_DATA
+        // CFG_LB_SFGI, 0x01, 0x00,                   // LB_SFGI - default value 0
+        // CFG_LB_FWI_ADC_FO, 0x01, 0x05,                   // LB_FWI_ADC_FO - default value 0x05
+        CFG_LB_BIT_RATE, 1, NFC_BIT_RATE_6780, CFG_LI_B_H_INFO_RESP, 0 // LI_B_H_INFO_RESP
+    };
+    nfcb_core_config[2] = sizeof(nfcb_core_config) - 3;
+    nci_write_read(pn7150, &nfcc_irq, nfcb_core_config, read_buf, 255);
+    // TODO handle response
+
+    uint8_t nfcb_routing_table[] = {
+        RF_CMD, RF_SET_LISTEN_MODE_ROUTING, 0, // NOTICE: packet length is set dynamically!
+        0x00,
+        2, // number of table entries
+        0x02, 9, 0x00, 0x3f, 0xd2, 0x76, 0x00, 0x00, 0x85, 0x01, 0x01,
+        // Route: DH, Power state: all on (NOTICE not sure if that's sensible),
+        // AID: 0xD2760000850101 (which stands for mapping version 2.0 NDEF Tag application)
+        0x01, 3, 0x00, 0x3f, 0x04 // Proto: ISO-DEP
+    };
+    nfcb_routing_table[2] = sizeof(nfcb_routing_table) - 3;
+    nci_write_read(pn7150, &nfcc_irq, nfcb_routing_table, read_buf, 255);
+    // TODO handle response
+
+    const uint8_t nfcb_rf_discover_cmd[] = {RF_CMD, RF_DISCOVER, 3, 1, NFC_B_PASSIVE_LISTEN_MODE, 0x01};
+    nci_write_read(pn7150, &nfcc_irq, nfcb_rf_discover_cmd, read_buf, 255);
+    // TODO handle response
+
+    return 0;
+}
+
 int main(void) {
     int ret = 0; // buffer for function return values
 
@@ -265,73 +390,43 @@ int main(void) {
             return 1;
         }
     }
-
     // END I2C setup
-
     // yippie, working i2c!
 
-    const uint8_t CORE_RESET_CMD[] = {0x20, 0x00, 1, 1}; // CORE_RESET_CMD(0x01), reset config
-    nci_write_read(&pn7150, &nfcc_irq, CORE_RESET_CMD, read_buf, 255);
+    const uint8_t core_reset_cmd[] = {CORE_CMD, CORE_RESET, 1, 1}; // CORE_RESET_CMD(0x01), reset config
+    nci_write_read(pn7150, &nfcc_irq, core_reset_cmd, read_buf, 255);
+    // TODO handle response
 
-    const uint8_t CORE_INIT_CMD[] = {0x20, 0x01, 0};
-    nci_write_read(&pn7150, &nfcc_irq, CORE_INIT_CMD, read_buf, 255);
+    const uint8_t core_init_cmd[] = {CORE_CMD, 0x01, 0};
+    nci_write_read(pn7150, &nfcc_irq, core_init_cmd, read_buf, 255);
+    // TODO handle response
 
-    const uint8_t PROP_ACT_CMD[] = {0x2f, 0x02, 0};
-    nci_write_read(&pn7150, &nfcc_irq, PROP_ACT_CMD, read_buf, 255);
+    const uint8_t prop_act_cmd[] = {
+        MT_CMD | 0xf, 0x02, 0}; // gid 0x0f seems to be some proprietary thing I just stole from the micropython demo
+    nci_write_read(pn7150, &nfcc_irq, prop_act_cmd, read_buf, 255);
+    // TODO handle response
 
-    // RF_DISCOVER_MAP_CMD 4 bytes, 1 mapping, 0x04: PROTOCOL_ISO_DEP, 0b10: map RF interface in listen mode,
-    // 0x02: ISO-DEP RF Interface
-    // -- according to chapter 7 in user manual
-    const uint8_t RF_DISCOVER_MAP_CMD[] = "\x21\x00\x04\x01\x04\x02\x02";
-    nci_write_read(&pn7150, &nfcc_irq, RF_DISCOVER_MAP_CMD, read_buf, 255);
-
-    uint8_t NFCB_CORE_CONFIG[] = {
-        0x20, 0x02, 0x1b,                   // CORE_SET_CONFIG_CMD NOTICE: packet length is set dynamically!
-        7,                                  // number of config entries
-//        0x38, 0x01, 0x00,                   // LB_SENSB_INFO - no support for both
-        0x39, 0x04, 0x13, 0x37, 0x70, 0x07, // LB_NFCID0
-//        0x3a, 0x04, 0x00, 0x00, 0x00, 0x00, // LB_APPLICATION_DATA
-//        0x3b, 0x01, 0x00,                   // LB_SFGI - default value 0
-//        0x3c, 0x01, 0x05,                   // LB_FWI_ADC_FO - default value 0x05
-        0x3e, 0x01, 0x06,                   // LB_BIT_RATE
-        0x5a, 0x00                          // LI_B_H_INFO_RESP
-    };
-    NFCB_CORE_CONFIG[2] = sizeof(NFCB_CORE_CONFIG) - 3;
-    nci_write_read(&pn7150, &nfcc_irq, NFCB_CORE_CONFIG, read_buf, 255);
-
-    uint8_t NFCB_ROUTING_TABLE[] = {
-        0x21, 0x01, 0x00, 0x00, // TODO Command annotation NOTICE: packet length calculated dynamically
-        2,                      // number of table entries
-        0x02, 0x09, 0x00, 0x3f, 0xd2, 0x76, 0x00, 0x00, 0x85, 0x01, 0x01,
-        // Route: DH, Power state: all on (NOTICE not sure if that's sensible),
-        // AID: 0xD2760000850101 (which stands for mapping version 2.0 NDEF Tag application)
-        0x01, 0x03, 0x00, 0x3f, 0x04 // Proto: ISO-DEP
-    };
-    NFCB_ROUTING_TABLE[2] = sizeof(NFCB_ROUTING_TABLE) - 3;
-    nci_write_read(&pn7150, &nfcc_irq, NFCB_ROUTING_TABLE, read_buf, 255);
-
-    const uint8_t RF_DISCOVER_CMD_NFCB[] = {0x21, 0x03, 0x03, 0x01, 0x81, 0x01}; // # RF_DISCOVER_CMD in B mode
-    nci_write_read(&pn7150, &nfcc_irq, RF_DISCOVER_CMD_NFCB, read_buf, 255);
+    nfca_nfc_dep_setup();
 
     printf("Reached end.");
 
     // TODO adjust dynamically based on period from dt
-    uint32_t PWM_MIN_PULSE = PWM_NSEC(5000);
-    uint32_t PWM_MAX_PULSE = PWM_MSEC(1);
+    uint32_t pwm_min_pulse = PWM_NSEC(5000);
+    uint32_t pwm_max_pulse = PWM_MSEC(1);
     bool dir = true;
-    uint32_t pulse = PWM_MIN_PULSE;
+    uint32_t pulse = pwm_min_pulse;
 
     while (true) {
         pwm_set_pulse_dt(&pwm_led_user0, pulse);
         pulse = dir ? pulse / 1.1 : pulse * 1.1;
-        if (dir && pulse < PWM_MIN_PULSE || !dir && pulse > PWM_MAX_PULSE) {
+        if (dir && pulse < pwm_min_pulse || !dir && pulse > pwm_max_pulse) {
             dir = !dir;
         }
 
         k_sleep(K_MSEC(50));
 
         if (gpio_pin_get_dt(&nfcc_irq)) {
-            nci_read(&pn7150, read_buf, 255);
+            nci_read(pn7150, read_buf, 255);
         }
     }
 
