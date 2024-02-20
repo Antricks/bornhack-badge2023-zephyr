@@ -9,8 +9,9 @@
 #include <zephyr/sys/util.h>
 #include <zephyr/usb/usb_device.h>
 
-#include "nci.h"
+#include "example-nci.h"
 #include "util.h"
+#include "config.h"
 
 #define WAIT_FOR_SERIAL 1
 
@@ -27,11 +28,6 @@ static const struct gpio_dt_spec led_user2 = GPIO_DT_SPEC_GET(DT_NODELABEL(led_u
 
 static const struct gpio_dt_spec nfcc_ven = GPIO_DT_SPEC_GET(DT_NODELABEL(nfcc_ven), gpios);
 static const struct gpio_dt_spec nfcc_irq = GPIO_DT_SPEC_GET(DT_NODELABEL(nfcc_irq), gpios);
-
-static const struct device *i2c_dev = DEVICE_DT_GET(DT_NODELABEL(i2c0));
-static const struct i2c_dt_spec pn7150 = I2C_DT_SPEC_GET(DT_NODELABEL(pn7150));
-
-static uint8_t read_buf[256] = {0}; // read buffer for i2c
 
 BUILD_ASSERT(DT_NODE_HAS_COMPAT(DT_CHOSEN(zephyr_console), zephyr_cdc_acm_uart), "Device is not ACM CDC UART device");
 
@@ -66,137 +62,15 @@ void btn2_handler(const struct device *dev, struct gpio_callback *cb, uint32_t p
 }
 
 void nfcc_irq_handler(const struct device *dev, struct gpio_callback *cb, uint32_t pins) {
-    fputs("+++ IRQ", stdout);
     int irq_val = gpio_pin_get_dt(&nfcc_irq);
-    printf("=%i +++\n", irq_val);
+
+#if DEBUG_NFCC_IRQ
+    printf("+++ IRQ=%i +++\n", irq_val);
+#endif
 
     gpio_pin_set_dt(&led_user2, irq_val);
 }
 
-int nfca_iso_dep_setup() {
-    // RF_DISCOVER_MAP_CMD 4 bytes, 1 mapping, 0x04: PROTOCOL_ISO_DEP, 0b10: map RF interface in listen mode,
-    // 0x02: ISO-DEP RF Interface
-    // -- according to chapter 7 in user manual
-    const uint8_t rf_discover_map_cmd[] = {RF_CMD, RF_DISCOVER_MAP, 4, 1, RF_PROTO_ISO_DEP,
-                                           0x02,   RF_INTF_ISO_DEP}; // 0x02 -> listen mode -> [NCI Table 51]
-    nci_write_read(pn7150, &nfcc_irq, rf_discover_map_cmd, read_buf, 255);
-    //TODO handle response
-
-    uint8_t nfca_core_config[] = {
-        CORE_CMD, CORE_SET_CONFIG, 0, // NOTICE: packet length is set dynamically!
-        4,                            // number of config entries
-        CFG_LA_BIT_FRAME_SDD,1,0x00, // LA_BIT_FRAME_SDD - 4 Byte ID1, 00000b 
-        CFG_LA_PLATFORM_CONFIG,1,0x0c, // LA_PLATFORM_CONFIG - RFU part set to 0, rest set to 1100b 
-        CFG_LA_SEL_INFO,1,0x60, // LA_SEL_INFO = ??
-        CFG_LA_NFCID1,7,0xcc,0xca,0xc,0x13,0x37,0x37,0xc3, // LA_NFCID1 = 0x37c31337
-        //0x59,0x01,0x00, //# LI_A_HIST_BY = 0
-        //0x5b,0x01,0x01, //# LI_A_BIT_RATE = maximum available bitrate 
-    };
-    nfca_core_config[2] = sizeof(nfca_core_config) - 3;
-    nci_write_read(pn7150, &nfcc_irq, nfca_core_config, read_buf, 255);
-    // TODO handle response
-
-    uint8_t nfca_routing_table[] = {
-        RF_CMD, RF_SET_LISTEN_MODE_ROUTING, 0, 0x00, // NOTICE: packet length is set dynamically!
-        3,
-        //0x02,0x07,0x00,0x3f,0x04,0x37,0xc3,0x13,0x37, // Application ID: 0x37c31337
-        0x02,0x0a,0x00,0x3f,0x07,0xd2,0x76,0x00,0x00,0x85,0x01,0x01, // Route: DH, Power state: all on (NOTICE not sure if that's sensible), AID: 0xD2760000850101 (which stands for mapping version 2.0 NDEF Tag application)
-        0x01,0x03,0x00,0x3f,0x04, // Proto: ISO-DEP
-        0x00,0x03,0x00,0x3f,0x00, // Techno: NFC-A 
-    };
-    nfca_routing_table[2] = sizeof(nfca_routing_table) - 3;
-    nci_write_read(pn7150, &nfcc_irq, nfca_routing_table, read_buf, 255);
-    // TODO handle response
-
-    const uint8_t nfca_rf_discover_cmd[] = {RF_CMD, RF_DISCOVER, 3, 1, NFC_A_PASSIVE_LISTEN_MODE, 0x01};
-    nci_write_read(pn7150, &nfcc_irq, nfca_rf_discover_cmd, read_buf, 255);
-    // TODO handle response
-    
-    return 0;
-}
-
-int nfca_nfc_dep_setup() {
-    const uint8_t rf_discover_map_cmd[] = {RF_CMD, RF_DISCOVER_MAP, 4, 1, RF_PROTO_NFC_DEP,
-                                           0x02,   RF_INTF_NFC_DEP}; // 0x02 -> listen mode -> [NCI Table 51]
-    nci_write_read(pn7150, &nfcc_irq, rf_discover_map_cmd, read_buf, 255);
-    //TODO handle response
-
-    uint8_t nfca_core_config[] = {
-        CORE_CMD, CORE_SET_CONFIG, 0, // NOTICE: packet length is set dynamically!
-        1,                            // number of config entries
-        //CFG_LA_BIT_FRAME_SDD,1,0x00, // LA_BIT_FRAME_SDD - 4 Byte ID1, 00000b 
-        //CFG_LA_PLATFORM_CONFIG,1,0x0c, // LA_PLATFORM_CONFIG - RFU part set to 0, rest set to 1100b 
-        //CFG_LA_SEL_INFO,1,0x60, // Still don't know what that does but seems to kinda work in ISO-DEP
-        CFG_LA_NFCID1,7,0xcc,0xca,0xcc,0x13,0x37,0x37,0xc3,
-        //CFG_LN_WT,1,10,
-        //CFG_LN_ATR_RES_GEN_BYTES,0,
-        //CFG_LN_ATR_RES_CONFIG,1,0x30
-    };
-    nfca_core_config[2] = sizeof(nfca_core_config) - 3;
-    nci_write_read(pn7150, &nfcc_irq, nfca_core_config, read_buf, 255);
-    // TODO handle response
-
-    uint8_t nfca_routing_table[] = {
-        RF_CMD, RF_SET_LISTEN_MODE_ROUTING, 0, 0x00, // NOTICE: packet length is set dynamically!
-        3,
-        //0x02,0x07,0x00,0x3f,0x04,0x37,0xc3,0x13,0x37, // Application ID: 0x37c31337
-        0x02,0x0a,0x00,0x3f,0x07,0xd2,0x76,0x00,0x00,0x85,0x01,0x01, // Route: DH, Power state: all on (NOTICE not sure if that's sensible), AID: 0xD2760000850101 (which stands for mapping version 2.0 NDEF Tag application)
-        0x01,0x03,0x00,0x3f,RF_PROTO_NFC_DEP,
-        0x00,0x03,0x00,0x3f,0x00, // Techno: NFC-A 
-    };
-    nfca_routing_table[2] = sizeof(nfca_routing_table) - 3;
-    nci_write_read(pn7150, &nfcc_irq, nfca_routing_table, read_buf, 255);
-    // TODO handle response
-
-    const uint8_t nfca_rf_discover_cmd[] = {RF_CMD, RF_DISCOVER, 3, 1, NFC_A_PASSIVE_LISTEN_MODE, 0x01};
-    nci_write_read(pn7150, &nfcc_irq, nfca_rf_discover_cmd, read_buf, 255);
-    // TODO handle response
-    
-    return 0;
-}
-
-int nfcb_iso_dep_setup() {
-    // RF_DISCOVER_MAP_CMD 4 bytes, 1 mapping, 0x04: PROTOCOL_ISO_DEP, 0b10: map RF interface in listen mode,
-    // 0x02: ISO-DEP RF Interface
-    // -- according to chapter 7 in user manual
-    const uint8_t rf_discover_map_cmd[] = {RF_CMD, RF_DISCOVER_MAP, 4, 1, RF_PROTO_ISO_DEP,
-                                           0x02,   RF_INTF_ISO_DEP}; // 0x02 -> listen mode -> [NCI Table 51]
-    nci_write_read(pn7150, &nfcc_irq, rf_discover_map_cmd, read_buf, 255);
-    // TODO handle response
-
-    uint8_t nfcb_core_config[] = {
-        CORE_CMD, CORE_SET_CONFIG, 0, // NOTICE: packet length is set dynamically!
-        2,                            // number of config entries
-        // CFG_LB_SENS_INFO, 0x01, 0x00,                   // LB_SENSB_INFO - no support for both
-        CFG_LB_NFCID0, 4, 0x13, 0x37, 0x70, 0x07, // LB_NFCID0
-        // CFG_LB_APPLICATION_DATA, 0x04, 0x00, 0x00, 0x00, 0x00, // LB_APPLICATION_DATA
-        // CFG_LB_SFGI, 0x01, 0x00,                   // LB_SFGI - default value 0
-        // CFG_LB_FWI_ADC_FO, 0x01, 0x05,                   // LB_FWI_ADC_FO - default value 0x05
-        CFG_LB_BIT_RATE, 1, NFC_BIT_RATE_6780, CFG_LI_B_H_INFO_RESP, 0 // LI_B_H_INFO_RESP
-    };
-    nfcb_core_config[2] = sizeof(nfcb_core_config) - 3;
-    nci_write_read(pn7150, &nfcc_irq, nfcb_core_config, read_buf, 255);
-    // TODO handle response
-
-    uint8_t nfcb_routing_table[] = {
-        RF_CMD, RF_SET_LISTEN_MODE_ROUTING, 0, // NOTICE: packet length is set dynamically!
-        0x00,
-        2, // number of table entries
-        0x02, 9, 0x00, 0x3f, 0xd2, 0x76, 0x00, 0x00, 0x85, 0x01, 0x01,
-        // Route: DH, Power state: all on (NOTICE not sure if that's sensible),
-        // AID: 0xD2760000850101 (which stands for mapping version 2.0 NDEF Tag application)
-        0x01, 3, 0x00, 0x3f, 0x04 // Proto: ISO-DEP
-    };
-    nfcb_routing_table[2] = sizeof(nfcb_routing_table) - 3;
-    nci_write_read(pn7150, &nfcc_irq, nfcb_routing_table, read_buf, 255);
-    // TODO handle response
-
-    const uint8_t nfcb_rf_discover_cmd[] = {RF_CMD, RF_DISCOVER, 3, 1, NFC_B_PASSIVE_LISTEN_MODE, 0x01};
-    nci_write_read(pn7150, &nfcc_irq, nfcb_rf_discover_cmd, read_buf, 255);
-    // TODO handle response
-
-    return 0;
-}
 
 int main(void) {
     int ret = 0; // buffer for function return values
@@ -327,10 +201,12 @@ int main(void) {
     // END NFCC flags
     // BEGIN GPIO Interrupts
 
+    /*
     struct gpio_callback irq_cb;
     gpio_pin_interrupt_configure_dt(&nfcc_irq, GPIO_INT_EDGE_BOTH);
     gpio_init_callback(&irq_cb, nfcc_irq_handler, BIT(nfcc_irq.pin));
     gpio_add_callback(nfcc_irq.port, &irq_cb);
+    */
 
     struct gpio_callback btn1_cb;
     gpio_pin_interrupt_configure_dt(&btn_user1, GPIO_INT_EDGE_BOTH);
@@ -345,6 +221,9 @@ int main(void) {
     // END GPIO Interrupts
     // BEGIN I2C setup
 
+    const struct device *i2c_dev = DEVICE_DT_GET(DT_NODELABEL(i2c0));
+    const struct i2c_dt_spec pn7150_i2c = I2C_DT_SPEC_GET(DT_NODELABEL(pn7150));
+
     ret = (i2c_dev == NULL || !device_is_ready(i2c_dev));
     if (ret) {
         puts("Could not get I2C controller device.");
@@ -355,7 +234,7 @@ int main(void) {
 
     puts("Got PN7150 dt spec.");
 
-    ret = i2c_is_ready_dt(&pn7150);
+    ret = i2c_is_ready_dt(&pn7150_i2c);
     if (ret) {
         puts("i2c_is_ready: true");
     } else {
@@ -367,7 +246,6 @@ int main(void) {
     uint32_t i2c_cfg_tmp = 0;
 
     ret = i2c_configure(i2c_dev, i2c_cfg);
-    printf("i2c_configure: %i\n", ret);
     if (ret) {
         printf("i2c_configure failed: %i\n", ret);
     } else {
@@ -393,22 +271,13 @@ int main(void) {
     // END I2C setup
     // yippie, working i2c!
 
-    const uint8_t core_reset_cmd[] = {CORE_CMD, CORE_RESET, 1, 1}; // CORE_RESET_CMD(0x01), reset config
-    nci_write_read(pn7150, &nfcc_irq, core_reset_cmd, read_buf, 255);
-    // TODO handle response
+    ExampleNci nci = ExampleNci(pn7150_i2c, nfcc_irq);
 
-    const uint8_t core_init_cmd[] = {CORE_CMD, 0x01, 0};
-    nci_write_read(pn7150, &nfcc_irq, core_init_cmd, read_buf, 255);
-    // TODO handle response
+    nci.nfcc_setup();
 
-    const uint8_t prop_act_cmd[] = {
-        MT_CMD | 0xf, 0x02, 0}; // gid 0x0f seems to be some proprietary thing I just stole from the micropython demo
-    nci_write_read(pn7150, &nfcc_irq, prop_act_cmd, read_buf, 255);
-    // TODO handle response
-
-    nfca_nfc_dep_setup();
-
-    printf("Reached end.");
+    //nci.nfca_nfc_dep_setup();
+    //nci.nfca_iso_dep_setup();
+    nci.nfcb_iso_dep_setup();
 
     // TODO adjust dynamically based on period from dt
     uint32_t pwm_min_pulse = PWM_NSEC(5000);
@@ -426,9 +295,10 @@ int main(void) {
         k_sleep(K_MSEC(50));
 
         if (gpio_pin_get_dt(&nfcc_irq)) {
-            nci_read(pn7150, read_buf, 255);
+            nci.nci_read();
         }
     }
 
     return 0;
 }
+

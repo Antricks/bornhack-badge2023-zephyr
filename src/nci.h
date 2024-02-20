@@ -228,11 +228,40 @@
 #define NFCEE_RSP MT_RSP | CMD_GID_NFCEE_MGMT
 #define NFCEE_NTF MT_NTF | CMD_GID_NFCEE_MGMT
 
+enum rf_state {
+    idle,
+    discovery,
+    listen_active,
+    listen_sleep,
+    poll_removal_detection,
+    poll_active,
+    w4_all_discoveries,
+    w4_host_select
+};
+
+class Nci {
+  public:
+    Nci(const struct i2c_dt_spec &i2c, const struct gpio_dt_spec &irq_gpio);
+    ~Nci();
+    int nci_read();
+    int nci_write(const uint8_t *cmd);
+    int nci_write_read(const uint8_t *cmd);
+    uint8_t read_buf[256];
+
+  protected:
+    size_t read_buf_len = 255;
+    const struct i2c_dt_spec &i2c;
+    const struct gpio_dt_spec &irq;
+
+    rf_state state;
+    uint8_t rf_intf;
+    uint8_t rf_techno_mode;
+    uint8_t discovery_id;
+    uint8_t max_data_payload_size;
+    uint8_t credits;
+};
+
 // returns the expected overall length of an NCI packet according to packet header
 size_t expected_packet_length(const uint8_t *packet);
 
-int nci_write(const struct i2c_dt_spec &dev, const uint8_t *cmd);
-int nci_read(const struct i2c_dt_spec &dev, uint8_t *resp_buf, size_t resp_read_len);
-int nci_write_read(const struct i2c_dt_spec &dev, const struct gpio_dt_spec *nfcc_irq, const uint8_t *cmd,
-                   uint8_t *resp_buf, size_t resp_read_len);
-void nci_debug(const uint8_t* msg_buf);
+void nci_debug(const uint8_t *msg_buf);

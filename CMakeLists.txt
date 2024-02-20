@@ -5,4 +5,4 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(nci-zephyr)
 
 target_include_directories(app PRIVATE src/)
-target_sources(app PRIVATE src/main.cpp src/util.cpp src/nci.cpp)
+target_sources(app PRIVATE src/main.cpp src/util.cpp src/nci.cpp src/example-nci.cpp)
