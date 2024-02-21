@@ -201,12 +201,10 @@ int main(void) {
     // END NFCC flags
     // BEGIN GPIO Interrupts
 
-    /*
     struct gpio_callback irq_cb;
     gpio_pin_interrupt_configure_dt(&nfcc_irq, GPIO_INT_EDGE_BOTH);
     gpio_init_callback(&irq_cb, nfcc_irq_handler, BIT(nfcc_irq.pin));
     gpio_add_callback(nfcc_irq.port, &irq_cb);
-    */
 
     struct gpio_callback btn1_cb;
     gpio_pin_interrupt_configure_dt(&btn_user1, GPIO_INT_EDGE_BOTH);
@@ -292,7 +290,7 @@ int main(void) {
             dir = !dir;
         }
 
-        k_sleep(K_MSEC(50));
+        k_sleep(K_MSEC(30));
 
         if (gpio_pin_get_dt(&nfcc_irq)) {
             nci.nci_read();

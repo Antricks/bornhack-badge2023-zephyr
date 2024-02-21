@@ -84,9 +84,9 @@ int Nci::nci_write_read(const uint8_t *cmd) {
     return 0;
 }
 
-void nci_parse_control_msg_standalone(const uint8_t *msg_buf, struct nci_control_msg &msg) {
+struct nci_control_msg Nci::nci_parse_control_msg_standalone(const uint8_t *msg_buf) {
     uint8_t payload_len = msg_buf[2];
-    msg = (struct nci_control_msg){
+    struct nci_control_msg msg = (struct nci_control_msg){
         .pkg_boundary_flag = (msg_buf[0] & 0x10) != 0,
         .gid = (uint8_t)(msg_buf[0] & 0x0f),
         .oid = msg_buf[1],
@@ -94,11 +94,12 @@ void nci_parse_control_msg_standalone(const uint8_t *msg_buf, struct nci_control
         .next = nullptr,
     };
     memcpy(msg.payload, &msg_buf[3], payload_len);
+    return msg;
 }
 
-void nci_parse_data_msg_standalone(const uint8_t *msg_buf, struct nci_data_msg &msg) {
+struct nci_data_msg Nci::nci_parse_data_msg_standalone(const uint8_t *msg_buf) {
     uint8_t payload_len = msg_buf[2];
-    msg = (struct nci_data_msg){
+    struct nci_data_msg msg = (struct nci_data_msg){
         .pkg_boundary_flag = (msg_buf[0] & 0x10) != 0,
         .conn_id = (uint8_t)(msg_buf[0] & 0x0f),
         .credits = (uint8_t)(msg_buf[1] & 0x03),
@@ -106,6 +107,7 @@ void nci_parse_data_msg_standalone(const uint8_t *msg_buf, struct nci_data_msg &
         .next = nullptr,
     };
     memcpy(msg.payload, &msg_buf[3], payload_len);
+    return msg;
 }
 
 void print_rf_technology(const uint8_t technology) {
@@ -211,12 +213,11 @@ void print_status(const uint8_t status) {
 // Theoretically it should not need it but a flag to deactivate debug messages & actual handling
 // could be nice in the future.
 // This should also take a representation of current context (state machine, parameters, ...)
-void nci_debug(const uint8_t *msg_buf) {
+void Nci::nci_debug(const uint8_t *msg_buf) {
     uint8_t mt = msg_buf[0] & 0xe0; // this should also maybe be abstracted.
     if (mt == MT_CMD) {
         // control message
-        struct nci_control_msg msg;
-        nci_parse_control_msg_standalone(msg_buf, msg);
+        struct nci_control_msg msg = nci_parse_control_msg_standalone(msg_buf);
         if (msg.pkg_boundary_flag) {
             printf("[PBF] ");
         }
@@ -269,8 +270,7 @@ void nci_debug(const uint8_t *msg_buf) {
         default: printf("[WARN] NCI control GID 0x%01x unknown.\n", msg_buf[0] & 0xf); break;
         }
     } else if (mt == MT_RSP) {
-        struct nci_control_msg msg;
-        nci_parse_control_msg_standalone(msg_buf, msg);
+        struct nci_control_msg msg = nci_parse_control_msg_standalone(msg_buf);
         if (msg.pkg_boundary_flag) {
             printf("[PBF] ");
         }
@@ -371,8 +371,7 @@ void nci_debug(const uint8_t *msg_buf) {
         default: printf("[WARN] NCI control GID 0x%01x unknown.\n", msg_buf[0] & 0xf); break;
         }
     } else if (mt == MT_NTF) {
-        struct nci_control_msg msg;
-        nci_parse_control_msg_standalone(msg_buf, msg);
+        struct nci_control_msg msg = nci_parse_control_msg_standalone(msg_buf);
         if (msg.pkg_boundary_flag) {
             printf("[PBF] ");
         }
@@ -568,8 +567,7 @@ void nci_debug(const uint8_t *msg_buf) {
         default: printf("[WARN] NCI control GID 0x%01x unknown.\n", msg_buf[0] & 0xf); break;
         }
     } else {
-        struct nci_data_msg msg;
-        nci_parse_data_msg_standalone(msg_buf, msg);
+        struct nci_data_msg msg = nci_parse_data_msg_standalone(msg_buf);
         if (msg.pkg_boundary_flag) {
             printf("[PBF] ");
         }

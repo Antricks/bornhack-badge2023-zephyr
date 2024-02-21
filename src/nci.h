@@ -243,12 +243,17 @@ class Nci {
   public:
     Nci(const struct i2c_dt_spec &i2c, const struct gpio_dt_spec &irq_gpio);
     ~Nci();
+
     int nci_read();
     int nci_write(const uint8_t *cmd);
     int nci_write_read(const uint8_t *cmd);
+    void nci_debug(const uint8_t *msg_buf);
     uint8_t read_buf[256];
 
   protected:
+    struct nci_control_msg nci_parse_control_msg_standalone(const uint8_t *msg_buf);
+    struct nci_data_msg nci_parse_data_msg_standalone(const uint8_t *msg_buf);
+
     size_t read_buf_len = 255;
     const struct i2c_dt_spec &i2c;
     const struct gpio_dt_spec &irq;
