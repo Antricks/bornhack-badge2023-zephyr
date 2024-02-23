@@ -2,14 +2,14 @@
 
 void hexdump(const uint8_t *buf, size_t len) {
     for (int i = 0; i < len; i++) {
-        printf("%02x", buf[i]);
+        printk("%02x", buf[i]); 
         if (i < len - 1) {
-            printf(":");
+            printk(":");
         }
     }
 }
 
 void hexdump(const char *prefix, const uint8_t *buf, size_t len) {
-    fputs(prefix, stdout);
+    printk("%s", prefix);
     hexdump(buf, len);
 }

@@ -13,8 +13,6 @@
 #include "util.h"
 #include "config.h"
 
-#define WAIT_FOR_SERIAL 1
-
 static const struct gpio_dt_spec btn_user1 = GPIO_DT_SPEC_GET(DT_NODELABEL(btn_user1), gpios);
 static const struct gpio_dt_spec btn_user2 = GPIO_DT_SPEC_GET(DT_NODELABEL(btn_user2), gpios);
 
@@ -46,7 +44,7 @@ int serial_init() {
     // TODO for some reason main does not print to stdout after some time if I don't do this. No clue why... ._.
     while (!dtr) {
         uart_line_ctrl_get(usb_device, UART_LINE_CTRL_DTR, &dtr);
-        k_sleep(K_MSEC(100));
+        k_msleep(100);
     }
 #endif
 
@@ -65,7 +63,7 @@ void nfcc_irq_handler(const struct device *dev, struct gpio_callback *cb, uint32
     int irq_val = gpio_pin_get_dt(&nfcc_irq);
 
 #if DEBUG_NFCC_IRQ
-    printf("+++ IRQ=%i +++\n", irq_val);
+    printk("+++ IRQ=%i +++\n", irq_val);
 #endif
 
     gpio_pin_set_dt(&led_user2, irq_val);
@@ -75,10 +73,12 @@ void nfcc_irq_handler(const struct device *dev, struct gpio_callback *cb, uint32
 int main(void) {
     int ret = 0; // buffer for function return values
 
+    /*
     ret = serial_init();
     if (ret != 0) {
         return ret;
     }
+    */
 
     // BEGIN Buttons
 
@@ -175,7 +175,7 @@ int main(void) {
 
     ret = gpio_pin_configure(nfcc_ven.port, nfcc_ven.pin, GPIO_OUTPUT);
     if (ret) {
-        printf("Could not configure NFCC's VEN (%i).\n", ret);
+        printk("Could not configure NFCC's VEN (%i).\n", ret);
         return ret;
     } else {
         puts("Set NFCC's VEN config.");
@@ -183,7 +183,7 @@ int main(void) {
 
     ret = gpio_pin_configure(nfcc_irq.port, nfcc_irq.pin, GPIO_INPUT | GPIO_PULL_DOWN);
     if (ret) {
-        printf("Could not configure NFCC's IRQ (%i).\n", ret);
+        printk("Could not configure NFCC's IRQ (%i).\n", ret);
         return ret;
     } else {
         puts("Set NFCC's IRQ config.");
@@ -191,12 +191,12 @@ int main(void) {
 
     ret = gpio_pin_set_dt(&nfcc_ven, 1);
     if (ret) {
-        printf("Could not set NFCC's VEN (%i).\n", ret);
+        printk("Could not set NFCC's VEN (%i).\n", ret);
         return ret;
     } else {
         puts("Set NFCC's VEN to ACTIVE.");
     }
-    k_sleep(K_MSEC(200));
+    k_msleep(200);
 
     // END NFCC flags
     // BEGIN GPIO Interrupts
@@ -245,21 +245,20 @@ int main(void) {
 
     ret = i2c_configure(i2c_dev, i2c_cfg);
     if (ret) {
-        printf("i2c_configure failed: %i\n", ret);
+        printk("i2c_configure failed: %i\n", ret);
     } else {
         puts("I2C config set successfully.");
     }
 
     ret = i2c_get_config(i2c_dev, &i2c_cfg_tmp);
-    printf("i2c_get_config: %i\n", ret);
     if (ret == -88) {
         puts("Config get not supported. (ENOSYS returned)");
     } else if (ret) {
-        printf("Could not get controller config. (%i)", ret);
+        printk("Could not get controller config. (%i)", ret);
         return ret;
     } else {
         if (i2c_cfg_tmp != i2c_cfg) {
-            printf("Config was not set correctly.");
+            printk("Config was not set correctly.");
             hexdump("\nretreived: ", (uint8_t *)&i2c_cfg_tmp, 4);
             hexdump("\nintended: ", (uint8_t *)&i2c_cfg, 4);
             puts("");
@@ -271,11 +270,14 @@ int main(void) {
 
     ExampleNci nci = ExampleNci(pn7150_i2c, nfcc_irq);
 
+    puts("juhuu 1");
     nci.nfcc_setup();
 
+    puts("juhuu 2");
     //nci.nfca_nfc_dep_setup();
     //nci.nfca_iso_dep_setup();
     nci.nfcb_iso_dep_setup();
+    puts("juhuu 3");
 
     // TODO adjust dynamically based on period from dt
     uint32_t pwm_min_pulse = PWM_NSEC(5000);
@@ -290,7 +292,7 @@ int main(void) {
             dir = !dir;
         }
 
-        k_sleep(K_MSEC(30));
+        k_msleep(50);
 
         if (gpio_pin_get_dt(&nfcc_irq)) {
             nci.nci_read();

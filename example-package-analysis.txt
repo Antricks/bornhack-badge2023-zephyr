@@ -74,17 +74,16 @@ ff - max data payload packet size (255)
         conn id: 0000 b - static rf connection between dh and remote nfc endpoint
         credits: 00 b
 0d - payload length (13 d)
- --- applying ISO-DEP format from here ---
-00 - package control byte: I-Block, no chain, no did
- --- not applying ISO-DEP format from here because I don't have 194CHF (around 205€) lying around to buy ISO/IEC 14443-4... ---
-a4:04:00:07:d2:76:00:00:85:01 - INF, TODO
-01:00 - CRC_B?
+ --- According to ISO/IEC 7816-4, Table 61: SELECT command ---
+00 - CLA
+a4 - INS
+04 - P1
+00 - P2 -> Response: return FCI template, optional use of FCI tag and length
+07 - L_c
+d2:76:00:00:85:01:01 - Select by DF name, e.g. (truncated) application id
+00 - L_e
 
 Noch ne Anmerkung: Android erzwingt ISO-DEP support für NFC-A, aber nicht für NFC-B wie's scheint.
 Sowas könnte also eventuell weiter verbreitet sein.
-Dementsprechend könnte mich vielleicht eher NFC-A mit NFC-DEP oder sowas interessieren.
-Lesen wir uns mal in die anderen Protokolle rein.
-Vielleicht habe ich mit etwas das nicht ISO ist, chancen da dran zu kommen ohne gottlos Geld blechen zu müssen :')
 
 Also wenn ich die Tabelle 3 in [DIGITAL] richtig lese, müsste ich auch NFC-A oder NFC-F mit T1T-T3T oder NFC-DEP nutzen können.
-Das sollte in den Dokumenten die ich habe spezifiziert sein.
