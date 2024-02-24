@@ -6,7 +6,11 @@
 #include "nci.h"
 #include "util.h"
 
-Nci::Nci(const struct i2c_dt_spec &i2c, const struct gpio_dt_spec &irq_gpio) : i2c(i2c), irq(irq_gpio) {}
+Nci::Nci(const struct i2c_dt_spec i2c, const struct gpio_dt_spec irq_gpio, uint8_t *read_buf)
+    : i2c(i2c), irq(irq_gpio) {
+    this->read_buf = read_buf;
+}
+
 Nci::~Nci() {}
 
 struct nci_control_msg {
@@ -33,23 +37,48 @@ size_t expected_packet_length(const uint8_t *packet) {
     return 3 + packet[2];
 }
 
+struct nci_control_msg Nci::nci_parse_control_msg_standalone(const uint8_t *msg_buf) {
+    uint8_t payload_len = msg_buf[2];
+    struct nci_control_msg msg = (struct nci_control_msg){
+        .pkg_boundary_flag = (msg_buf[0] & 0x10) != 0,
+        .gid = (uint8_t)(msg_buf[0] & 0x0f),
+        .oid = msg_buf[1],
+        .payload_len = payload_len,
+        .payload = {0},
+        .next = nullptr,
+    };
+    memcpy(&msg.payload[0], &msg_buf[3], payload_len);
+    return msg;
+}
+
+struct nci_data_msg Nci::nci_parse_data_msg_standalone(const uint8_t *msg_buf) {
+    uint8_t payload_len = msg_buf[2];
+    struct nci_data_msg msg = (struct nci_data_msg){
+        .pkg_boundary_flag = (msg_buf[0] & 0x10) != 0,
+        .conn_id = (uint8_t)(msg_buf[0] & 0x0f),
+        .credits = (uint8_t)(msg_buf[1] & 0x03),
+        .payload_len = payload_len,
+        .payload = {0},
+        .next = nullptr,
+    };
+    memcpy(&msg.payload[0], &msg_buf[3], payload_len);
+    return msg;
+}
+
 int Nci::nci_write(const uint8_t *cmd) {
-    puts("juhuu 1.1.1.1");
     int ret = i2c_write_dt(&this->i2c, cmd, expected_packet_length(cmd));
     if (ret) {
-        printk("i2c_write_dt: %i\n", ret);
+        printf("i2c_write_dt: %i\n", ret);
         return ret;
     }
-    puts("juhuu 1.1.1.2");
 #if DEBUG_NCI_HEXDUMP
+    // hexdump("> ", cmd, expected_packet_length(cmd));
     hexdump("> ", cmd, expected_packet_length(cmd));
     puts("");
 #endif
-    puts("juhuu 1.1.1.3");
 #if DEBUG_NCI_ANALYSIS
     nci_debug(cmd);
 #endif
-    puts("juhuu 1.1.1.4");
     return 0;
 }
 
@@ -57,10 +86,11 @@ int Nci::nci_read() {
     // TODO this currently enforces read_buf to be public which is not good...
     int ret = i2c_read_dt(&this->i2c, this->read_buf, this->read_buf_len);
     if (ret) {
-        printk("i2c_read_dt: %i\n", ret);
+        printf("i2c_read_dt: %i\n", ret);
         return ret;
     }
 #if DEBUG_NCI_HEXDUMP
+    // hexdump("< ", this->read_buf, expected_packet_length(this->read_buf));
     hexdump("< ", this->read_buf, expected_packet_length(this->read_buf));
     puts("");
 #endif
@@ -73,148 +103,118 @@ int Nci::nci_read() {
 int Nci::nci_write_read(const uint8_t *cmd) {
     int ret = 0;
 
-    puts("juhuu 1.1.1");
     ret = this->nci_write(cmd);
     if (ret) {
         return ret;
     }
 
-    puts("juhuu 1.1.2");
     while (gpio_pin_get_dt(&this->irq) == 0) {
         k_sleep(K_MSEC(50));
     }
-    puts("juhuu 1.1.3");
 
     ret = nci_read();
     if (ret)
         return ret;
 
-    puts("juhuu 1.1.4");
     return 0;
-}
-
-struct nci_control_msg Nci::nci_parse_control_msg_standalone(const uint8_t *msg_buf) {
-    uint8_t payload_len = msg_buf[2];
-    struct nci_control_msg msg = (struct nci_control_msg){
-        .pkg_boundary_flag = (msg_buf[0] & 0x10) != 0,
-        .gid = (uint8_t)(msg_buf[0] & 0x0f),
-        .oid = msg_buf[1],
-        .payload_len = payload_len,
-        .next = nullptr,
-    };
-    memcpy(msg.payload, &msg_buf[3], payload_len);
-    return msg;
-}
-
-struct nci_data_msg Nci::nci_parse_data_msg_standalone(const uint8_t *msg_buf) {
-    uint8_t payload_len = msg_buf[2];
-    struct nci_data_msg msg = (struct nci_data_msg){
-        .pkg_boundary_flag = (msg_buf[0] & 0x10) != 0,
-        .conn_id = (uint8_t)(msg_buf[0] & 0x0f),
-        .credits = (uint8_t)(msg_buf[1] & 0x03),
-        .payload_len = payload_len,
-        .next = nullptr,
-    };
-    memcpy(msg.payload, &msg_buf[3], payload_len);
-    return msg;
 }
 
 void print_rf_technology(const uint8_t technology) {
     switch (technology) {
-    case NFC_RF_TECHNOLOGY_A: printk("NFC-A"); break;
-    case NFC_RF_TECHNOLOGY_B: printk("NFC-B"); break;
-    case NFC_RF_TECHNOLOGY_F: printk("NFC-F"); break;
-    case NFC_RF_TECHNOLOGY_V: printk("NFC-V"); break;
-    default: printk("[unknown RF technology 0x%02x]", technology); break;
+    case NFC_RF_TECHNOLOGY_A: printf("NFC-A"); break;
+    case NFC_RF_TECHNOLOGY_B: printf("NFC-B"); break;
+    case NFC_RF_TECHNOLOGY_F: printf("NFC-F"); break;
+    case NFC_RF_TECHNOLOGY_V: printf("NFC-V"); break;
+    default: printf("[unknown RF technology 0x%02x]", technology); break;
     }
 }
 
 void print_technology_mode(const uint8_t technology_mode) {
     switch (technology_mode) {
-    case NFC_A_PASSIVE_POLL_MODE: printk("NFC-A passive poll mode"); break;
-    case NFC_B_PASSIVE_POLL_MODE: printk("NFC-B passive poll mode"); break;
-    case NFC_F_PASSIVE_POLL_MODE: printk("NFC-F passive poll mode"); break;
-    case NFC_ACTIVE_POLL_MODE: printk("NFC active poll mode"); break;
-    case NFC_V_PASSIVE_POLL_MODE: printk("NFC-V passivle poll mode"); break;
-    case NFC_A_PASSIVE_LISTEN_MODE: printk("NFC-A passive listen mode"); break;
-    case NFC_B_PASSIVE_LISTEN_MODE: printk("NFC-B passive listen mode"); break;
-    case NFC_F_PASSIVE_LISTEN_MODE: printk("NFC-F passive listen mode"); break;
-    case NFC_ACTIVE_LISTEN_MODE: printk("NFC active listen mode"); break;
-    default: printk("[unknown NFC technology / mode 0x%02x]", technology_mode); break;
+    case NFC_A_PASSIVE_POLL_MODE: printf("NFC-A passive poll mode"); break;
+    case NFC_B_PASSIVE_POLL_MODE: printf("NFC-B passive poll mode"); break;
+    case NFC_F_PASSIVE_POLL_MODE: printf("NFC-F passive poll mode"); break;
+    case NFC_ACTIVE_POLL_MODE: printf("NFC active poll mode"); break;
+    case NFC_V_PASSIVE_POLL_MODE: printf("NFC-V passivle poll mode"); break;
+    case NFC_A_PASSIVE_LISTEN_MODE: printf("NFC-A passive listen mode"); break;
+    case NFC_B_PASSIVE_LISTEN_MODE: printf("NFC-B passive listen mode"); break;
+    case NFC_F_PASSIVE_LISTEN_MODE: printf("NFC-F passive listen mode"); break;
+    case NFC_ACTIVE_LISTEN_MODE: printf("NFC active listen mode"); break;
+    default: printf("[unknown NFC technology / mode 0x%02x]", technology_mode); break;
     }
 }
 
 void print_bitrate(const uint8_t bitrate) {
     switch (bitrate) {
-    case NFC_BIT_RATE_106: printk("106 kbit/s"); break;
-    case NFC_BIT_RATE_212: printk("212 kbit/s"); break;
-    case NFC_BIT_RATE_424: printk("424 kbit/s"); break;
-    case NFC_BIT_RATE_848: printk("848 kbit/s"); break;
-    case NFC_BIT_RATE_1695: printk("1695 kbit/s"); break;
-    case NFC_BIT_RATE_3390: printk("3390 kbit/s"); break;
-    case NFC_BIT_RATE_6780: printk("6780 kbit/s"); break;
-    case NFC_BIT_RATE_26: printk("26 kbit/s"); break;
-    default: printk("[unknown bitrate 0x%02x]", bitrate); break;
+    case NFC_BIT_RATE_106: printf("106 kbit/s"); break;
+    case NFC_BIT_RATE_212: printf("212 kbit/s"); break;
+    case NFC_BIT_RATE_424: printf("424 kbit/s"); break;
+    case NFC_BIT_RATE_848: printf("848 kbit/s"); break;
+    case NFC_BIT_RATE_1695: printf("1695 kbit/s"); break;
+    case NFC_BIT_RATE_3390: printf("3390 kbit/s"); break;
+    case NFC_BIT_RATE_6780: printf("6780 kbit/s"); break;
+    case NFC_BIT_RATE_26: printf("26 kbit/s"); break;
+    default: printf("[unknown bitrate 0x%02x]", bitrate); break;
     }
 }
 
 void print_rf_protocol(const uint8_t protocol) {
     switch (protocol) {
-    case RF_PROTO_UNDETERMINED: printk("RF_PROTO_UNDETERMINED"); break;
-    case RF_PROTO_T1T_DEPRECATED: printk("T1T (deprecated)"); break;
-    case RF_PROTO_T2T: printk("T2T"); break;
-    case RF_PROTO_T3T: printk("T3T"); break;
-    case RF_PROTO_ISO_DEP: printk("ISO-DEP"); break;
-    case RF_PROTO_NFC_DEP: printk("NFC-DEP"); break;
-    case RF_PROTO_T5T: printk("T5T"); break;
-    case RF_PROTO_NDEF: printk("NDEF"); break;
-    case RF_PROTO_WLC: printk("WLC"); break;
-    default: printk("[unknown protocol 0x%02x]", protocol); break;
+    case RF_PROTO_UNDETERMINED: printf("RF_PROTO_UNDETERMINED"); break;
+    case RF_PROTO_T1T_DEPRECATED: printf("T1T (deprecated)"); break;
+    case RF_PROTO_T2T: printf("T2T"); break;
+    case RF_PROTO_T3T: printf("T3T"); break;
+    case RF_PROTO_ISO_DEP: printf("ISO-DEP"); break;
+    case RF_PROTO_NFC_DEP: printf("NFC-DEP"); break;
+    case RF_PROTO_T5T: printf("T5T"); break;
+    case RF_PROTO_NDEF: printf("NDEF"); break;
+    case RF_PROTO_WLC: printf("WLC"); break;
+    default: printf("[unknown protocol 0x%02x]", protocol); break;
     }
 }
 
 void print_rf_interface(const uint8_t intf) {
     switch (intf) {
-    case RF_INTF_NFCEE_DIRECT: printk("NFCEE direct"); break;
-    case RF_INTF_FRAME: printk("Frame RF"); break;
-    case RF_INTF_ISO_DEP: printk("ISO-DEP"); break;
-    case RF_INTF_NFC_DEP: printk("NFC-DEP"); break;
-    case RF_INTF_NDEF: printk("NDEF"); break;
-    case RF_INTF_WLC_P_AUTONOMOUS: printk("WLC-P autonomous"); break;
-    default: printk("[unknown RF interface 0x%02x]", intf); break;
+    case RF_INTF_NFCEE_DIRECT: printf("NFCEE direct"); break;
+    case RF_INTF_FRAME: printf("Frame RF"); break;
+    case RF_INTF_ISO_DEP: printf("ISO-DEP"); break;
+    case RF_INTF_NFC_DEP: printf("NFC-DEP"); break;
+    case RF_INTF_NDEF: printf("NDEF"); break;
+    case RF_INTF_WLC_P_AUTONOMOUS: printf("WLC-P autonomous"); break;
+    default: printf("[unknown RF interface 0x%02x]", intf); break;
     }
 }
 
 void print_status(const uint8_t status) {
     switch (status) {
-    case STATUS_OK: printk("OK"); break;
-    case STATUS_REJECTED: printk("REJECTED"); break;
-    case STATUS_FAILED: printk("FAILED"); break;
-    case STATUS_NOT_INITIALIZED: printk("NOT_INITIALIZED"); break;
-    case STATUS_SYNTAX_ERROR: printk("SYNTAX_ERROR"); break;
-    case STATUS_SEMANTIC_ERROR: printk("SEMANTIC_ERROR"); break;
-    case STATUS_INVALID_PARAM: printk("INVALID_PARAM"); break;
-    case STATUS_MESSAGE_SIZE_EXCEEDED: printk("MESSAGE_SIZE_EXCEEDED"); break;
-    case STATUS_OK_1_BIT: printk("OK_1_BIT"); break;
-    case STATUS_OK_2_BIT: printk("OK_2_BIT"); break;
-    case STATUS_OK_3_BIT: printk("OK_3_BIT"); break;
-    case STATUS_OK_4_BIT: printk("OK_4_BIT"); break;
-    case STATUS_OK_5_BIT: printk("OK_5_BIT"); break;
-    case STATUS_OK_6_BIT: printk("OK_6_BIT"); break;
-    case STATUS_OK_7_BIT: printk("OK_7_BIT"); break;
-    case STATUS_DISCOVERY_ALREADY_STARTED: printk("DISCOVERY_ALREADY_STARTED"); break;
-    case STATUS_DISCOVERY_TARGET_ACTIVATION_FAILED: printk("DISCOVERY_TARGET_ACTIVATION_FAILED"); break;
-    case STATUS_DISCOVERY_TEAR_DOWN: printk("DISCOVERY_TEAR_DOWN"); break;
-    case STATUS_RF_FRAME_CORRUPTED: printk("RF_FRAME_CORRUPTED"); break;
-    case STATUS_RF_TRANSMISSION_EXCEPTION: printk("RF_TRANSMISSION_EXCEPTION"); break;
-    case STATUS_RF_PROTOCOL_EXCEPTION: printk("RF_PROTOCOL_EXCEPTION"); break;
-    case STATUS_RF_TIMEOUT_EXCEPTION: printk("RF_TIMEOUT_EXCEPTION"); break;
-    case STATUS_RF_UNEXPECTED_DATA: printk("RF_UNEXPECTED_DATA"); break;
-    case STATUS_NFCEE_INTERFACE_ACTIVATION_FAILED: printk("NFCEE_INTERFACE_ACTIVATION_FAILED"); break;
-    case STATUS_NFCEE_TRANSMISSION_ERROR: printk("NFCEE_TRANSMISSION_ERROR"); break;
-    case STATUS_NFCEE_PROTOCOL_ERROR: printk("NFCEE_PROTOCOL_ERROR"); break;
-    case STATUS_NFCEE_TIMEOUT_ERROR: printk("NFCEE_TIMEOUT_ERROR"); break;
-    default: printk("[unknown status 0x%02x]", status); break;
+    case STATUS_OK: printf("OK"); break;
+    case STATUS_REJECTED: printf("REJECTED"); break;
+    case STATUS_FAILED: printf("FAILED"); break;
+    case STATUS_NOT_INITIALIZED: printf("NOT_INITIALIZED"); break;
+    case STATUS_SYNTAX_ERROR: printf("SYNTAX_ERROR"); break;
+    case STATUS_SEMANTIC_ERROR: printf("SEMANTIC_ERROR"); break;
+    case STATUS_INVALID_PARAM: printf("INVALID_PARAM"); break;
+    case STATUS_MESSAGE_SIZE_EXCEEDED: printf("MESSAGE_SIZE_EXCEEDED"); break;
+    case STATUS_OK_1_BIT: printf("OK_1_BIT"); break;
+    case STATUS_OK_2_BIT: printf("OK_2_BIT"); break;
+    case STATUS_OK_3_BIT: printf("OK_3_BIT"); break;
+    case STATUS_OK_4_BIT: printf("OK_4_BIT"); break;
+    case STATUS_OK_5_BIT: printf("OK_5_BIT"); break;
+    case STATUS_OK_6_BIT: printf("OK_6_BIT"); break;
+    case STATUS_OK_7_BIT: printf("OK_7_BIT"); break;
+    case STATUS_DISCOVERY_ALREADY_STARTED: printf("DISCOVERY_ALREADY_STARTED"); break;
+    case STATUS_DISCOVERY_TARGET_ACTIVATION_FAILED: printf("DISCOVERY_TARGET_ACTIVATION_FAILED"); break;
+    case STATUS_DISCOVERY_TEAR_DOWN: printf("DISCOVERY_TEAR_DOWN"); break;
+    case STATUS_RF_FRAME_CORRUPTED: printf("RF_FRAME_CORRUPTED"); break;
+    case STATUS_RF_TRANSMISSION_EXCEPTION: printf("RF_TRANSMISSION_EXCEPTION"); break;
+    case STATUS_RF_PROTOCOL_EXCEPTION: printf("RF_PROTOCOL_EXCEPTION"); break;
+    case STATUS_RF_TIMEOUT_EXCEPTION: printf("RF_TIMEOUT_EXCEPTION"); break;
+    case STATUS_RF_UNEXPECTED_DATA: printf("RF_UNEXPECTED_DATA"); break;
+    case STATUS_NFCEE_INTERFACE_ACTIVATION_FAILED: printf("NFCEE_INTERFACE_ACTIVATION_FAILED"); break;
+    case STATUS_NFCEE_TRANSMISSION_ERROR: printf("NFCEE_TRANSMISSION_ERROR"); break;
+    case STATUS_NFCEE_PROTOCOL_ERROR: printf("NFCEE_PROTOCOL_ERROR"); break;
+    case STATUS_NFCEE_TIMEOUT_ERROR: printf("NFCEE_TIMEOUT_ERROR"); break;
+    default: printf("[unknown status 0x%02x]", status); break;
     }
 }
 
@@ -228,271 +228,271 @@ void Nci::nci_debug(const uint8_t *msg_buf) {
         // control message
         struct nci_control_msg msg = nci_parse_control_msg_standalone(msg_buf);
         if (msg.pkg_boundary_flag) {
-            printk("[PBF] ");
+            printf("[PBF] ");
         }
         switch (msg.gid) {
         case CMD_GID_CORE:
             switch (msg.oid) {
-            case CORE_RESET: printk("CORE_RESET_CMD\n"); break;                             // TODO details
-            case CORE_INIT: printk("CORE_INIT_CMD\n"); break;                               // TODO details
-            case CORE_SET_CONFIG: printk("CORE_SET_CONFIG_CMD\n"); break;                   // TODO details
-            case CORE_GET_CONFIG: printk("CORE_GET_CONFIG_CMD\n"); break;                   // TODO details
-            case CORE_CONN_CREATE: printk("CORE_CONN_CREATE_CMD\n"); break;                 // TODO details
-            case CORE_CONN_CLOSE: printk("CORE_CONN_CLOSE_CMD\n"); break;                   // TODO details
-            case CORE_SET_POWER_SUB_STATE: printk("CORE_SET_POWER_SUB_STATE_CMD\n"); break; // TODO details
-            default: printk("[WARN] Command unknown for Core OID: 0x%02x\n", msg.oid); break;
+            case CORE_RESET: printf("CORE_RESET_CMD\n"); break;                             // TODO details
+            case CORE_INIT: printf("CORE_INIT_CMD\n"); break;                               // TODO details
+            case CORE_SET_CONFIG: printf("CORE_SET_CONFIG_CMD\n"); break;                   // TODO details
+            case CORE_GET_CONFIG: printf("CORE_GET_CONFIG_CMD\n"); break;                   // TODO details
+            case CORE_CONN_CREATE: printf("CORE_CONN_CREATE_CMD\n"); break;                 // TODO details
+            case CORE_CONN_CLOSE: printf("CORE_CONN_CLOSE_CMD\n"); break;                   // TODO details
+            case CORE_SET_POWER_SUB_STATE: printf("CORE_SET_POWER_SUB_STATE_CMD\n"); break; // TODO details
+            default: printf("[WARN] Command unknown for Core OID: 0x%02x\n", msg.oid); break;
             }
             break;
         case CMD_GID_RF:
             switch (msg.oid) {
-            case RF_DISCOVER_MAP: printk("RF_DISCOVER_MAP_CMD\n"); break;                         // TODO details
-            case RF_SET_LISTEN_MODE_ROUTING: printk("RF_SET_LISTEN_MODE_ROUTING_CMD\n"); break;   // TODO details
-            case RF_GET_LISTEN_MODE_ROUTING: printk("RF_GET_LISTEN_MODE_ROUTING_CMD\n"); break;   // TODO details
-            case RF_DISCOVER: printk("RF_DISCOVER_CMD\n"); break;                                 // TODO details
-            case RF_DISCOVER_SELECT: printk("RF_DISCOVER_SELECT_CMD\n"); break;                   // TODO details
-            case RF_DEACTIVATE: printk("RF_DEACTIVATE_CMD\n"); break;                             // TODO details
-            case RF_T3T_POLLING: printk("RF_T3T_POLLING_CMD\n"); break;                           // TODO details
-            case RF_PARAMETER_UPDATE: printk("RF_PARAMETER_UPDATE_CMD\n"); break;                 // TODO details
-            case RF_INTF_EXT_START: printk("RF_INTF_EXT_START_CMD\n"); break;                     // TODO details
-            case RF_INTF_EXT_STOP: printk("RF_INTF_EXT_STOP_CMD\n"); break;                       // TODO details
-            case RF_EXT_AGG_ABORT: printk("RF_EXT_AGG_ABORT_CMD\n"); break;                       // TODO details
-            case RF_NDEF_ABORT: printk("RF_NDEF_ABORT_CMD\n"); break;                             // TODO details
-            case RF_ISO_DEP_NAK_PRESENCE: printk("RF_ISO_DEP_NAK_PRESENCE_CMD\n"); break;         // TODO details
-            case RF_SET_FORCED_NFCEE_ROUTING: printk("RF_SET_FORCED_NFCEE_ROUTING_CMD\n"); break; // TODO details
-            case RF_REMOVAL_DETECTION: printk("RF_REMOVAL_DETECTION_CMD\n"); break;               // TODO details
-            case GET_WLCP_INFO_PARAM: printk("RF_GET_WLCP_INFO_PARAM_CMD\n"); break;              // TODO details
-            case WPT_START: printk("RF_WPT_START_CMD\n"); break;                                  // TODO details
-            default: printk("[WARN] Command unknown for RF management OID: 0x%02x\n", msg.oid); break;
+            case RF_DISCOVER_MAP: printf("RF_DISCOVER_MAP_CMD\n"); break;                         // TODO details
+            case RF_SET_LISTEN_MODE_ROUTING: printf("RF_SET_LISTEN_MODE_ROUTING_CMD\n"); break;   // TODO details
+            case RF_GET_LISTEN_MODE_ROUTING: printf("RF_GET_LISTEN_MODE_ROUTING_CMD\n"); break;   // TODO details
+            case RF_DISCOVER: printf("RF_DISCOVER_CMD\n"); break;                                 // TODO details
+            case RF_DISCOVER_SELECT: printf("RF_DISCOVER_SELECT_CMD\n"); break;                   // TODO details
+            case RF_DEACTIVATE: printf("RF_DEACTIVATE_CMD\n"); break;                             // TODO details
+            case RF_T3T_POLLING: printf("RF_T3T_POLLING_CMD\n"); break;                           // TODO details
+            case RF_PARAMETER_UPDATE: printf("RF_PARAMETER_UPDATE_CMD\n"); break;                 // TODO details
+            case RF_INTF_EXT_START: printf("RF_INTF_EXT_START_CMD\n"); break;                     // TODO details
+            case RF_INTF_EXT_STOP: printf("RF_INTF_EXT_STOP_CMD\n"); break;                       // TODO details
+            case RF_EXT_AGG_ABORT: printf("RF_EXT_AGG_ABORT_CMD\n"); break;                       // TODO details
+            case RF_NDEF_ABORT: printf("RF_NDEF_ABORT_CMD\n"); break;                             // TODO details
+            case RF_ISO_DEP_NAK_PRESENCE: printf("RF_ISO_DEP_NAK_PRESENCE_CMD\n"); break;         // TODO details
+            case RF_SET_FORCED_NFCEE_ROUTING: printf("RF_SET_FORCED_NFCEE_ROUTING_CMD\n"); break; // TODO details
+            case RF_REMOVAL_DETECTION: printf("RF_REMOVAL_DETECTION_CMD\n"); break;               // TODO details
+            case GET_WLCP_INFO_PARAM: printf("RF_GET_WLCP_INFO_PARAM_CMD\n"); break;              // TODO details
+            case WPT_START: printf("RF_WPT_START_CMD\n"); break;                                  // TODO details
+            default: printf("[WARN] Command unknown for RF management OID: 0x%02x\n", msg.oid); break;
             }
             break;
         case CMD_GID_NFCEE_MGMT:
             switch (msg.oid) {
-            case NFCEE_DISCOVER: printk("NFCEE_DISCOVER_CMD\n"); break;                         // TODO details
-            case NFCEE_MODE_SET: printk("NFCEE_MODE_SET_CMD\n"); break;                         // TODO details
-            case NFCEE_STATUS: printk("NFCEE_STATUS_CMD\n"); break;                             // TODO details
-            case NFCEE_POWER_AND_LINK_CNTRL: printk("NFCEE_POWER_AND_LINK_CNTRL_CMD\n"); break; // TODO details
-            default: printk("[WARN] Command unknown for NFCEE management OID: 0x%02x\n", msg.oid); break;
+            case NFCEE_DISCOVER: printf("NFCEE_DISCOVER_CMD\n"); break;                         // TODO details
+            case NFCEE_MODE_SET: printf("NFCEE_MODE_SET_CMD\n"); break;                         // TODO details
+            case NFCEE_STATUS: printf("NFCEE_STATUS_CMD\n"); break;                             // TODO details
+            case NFCEE_POWER_AND_LINK_CNTRL: printf("NFCEE_POWER_AND_LINK_CNTRL_CMD\n"); break; // TODO details
+            default: printf("[WARN] Command unknown for NFCEE management OID: 0x%02x\n", msg.oid); break;
             }
             break;
-        case CMD_GID_NFCC_MGMT: printk("No NFCC management commands known.\n"); break;
-        case CMD_GID_TEST_MGMT: printk("No test management commands known.\n"); break;
-        default: printk("[WARN] NCI control GID 0x%01x unknown.\n", msg_buf[0] & 0xf); break;
+        case CMD_GID_NFCC_MGMT: printf("No NFCC management commands known.\n"); break;
+        case CMD_GID_TEST_MGMT: printf("No test management commands known.\n"); break;
+        default: printf("[WARN] NCI control GID 0x%01x unknown.\n", msg_buf[0] & 0xf); break;
         }
     } else if (mt == MT_RSP) {
         struct nci_control_msg msg = nci_parse_control_msg_standalone(msg_buf);
         if (msg.pkg_boundary_flag) {
-            printk("[PBF] ");
+            printf("[PBF] ");
         }
         switch (msg.gid) {
         case CMD_GID_CORE:
             switch (msg.oid) {
             case CORE_RESET:
-                printk("CORE_RESET_RSP\n");
+                printf("CORE_RESET_RSP\n");
                 break; // TODO details (has different format than specified in practice... weird...)
             case CORE_INIT:
-                printk("CORE_INIT_RSP (");
+                printf("CORE_INIT_RSP (");
                 print_status(msg.payload[0]);
-                printk(")\n");
+                printf(")\n");
                 if (msg.payload[0] != STATUS_OK)
                     break;
-                printk("\tNFCC Features: ");
-                hexdump((uint8_t *)&(msg.payload) + 1, 4); // TODO make human readable
-                printk("\n");
-                printk("\tMax Logical Connections: %i\n", msg.payload[5]);
-                printk("\tMax Routing Table Size: %i\n", *((uint16_t *)(msg.payload + 6)));
-                printk("\tMax Control Packet Payload Size: %i\n", msg.payload[8]);
-                printk("\tMax Data Packet Payload Size: %i\n", msg.payload[9]);
-                printk("\tHCI Credits: %i\n", msg.payload[10]);
+                printf("\tNFCC Features: ");
+                hexdump(&msg.payload[1], 4); // TODO make human readable
+                printf("\n");
+                printf("\tMax Logical Connections: %i\n", msg.payload[5]);
+                printf("\tMax Routing Table Size: %i\n", *((uint16_t *)(&msg.payload[6])));
+                printf("\tMax Control Packet Payload Size: %i\n", msg.payload[8]);
+                printf("\tMax Data Packet Payload Size: %i\n", msg.payload[9]);
+                printf("\tHCI Credits: %i\n", msg.payload[10]);
                 // NOTE values bigger than one octet are encoded in little endian.
-                printk("\tMax NFC-V RF Frame Size: %i\n", *((uint16_t *)(msg.payload + 11)));
-                printk("\tNumber of Supported RF Interfaces: %i\n", msg.payload[13]);
-                printk("\tSupported RF Interfaces: ");
-                hexdump((uint8_t *)&(msg.payload) + 14, msg.payload_len - 14); // TODO make human readable
-                printk("\n");
+                printf("\tMax NFC-V RF Frame Size: %i\n", *((uint16_t *)(&msg.payload[11])));
+                printf("\tNumber of Supported RF Interfaces: %i\n", msg.payload[13]);
+                printf("\tSupported RF Interfaces: ");
+                hexdump(&msg.payload[14], msg.payload_len - 14); // TODO make human readable
+                printf("\n");
                 break; // TODO the data coming from this in practice doesn't seem right. But I think this code behaves
                        // as specified...
             case CORE_SET_CONFIG:
-                printk("CORE_SET_CONFIG_RSP (");
+                printf("CORE_SET_CONFIG_RSP (");
                 print_status(msg.payload[0]);
-                printk(")\n");
+                printf(")\n");
                 if (msg.payload[0] == STATUS_OK)
                     break;
-                printk("\tInvalid parameters (%i): ", msg.payload[1]);
-                hexdump((uint8_t *)&(msg.payload) + 2, msg.payload[1]); // TODO make human readable
-                printk("\n");
+                printf("\tInvalid parameters (%i): ", msg.payload[1]);
+                hexdump(&msg.payload[2], msg.payload[1]); // TODO make human readable
+                printf("\n");
                 break;
-            case CORE_GET_CONFIG: printk("CORE_GET_CONFIG_RSP\n"); break;                   // TODO details
-            case CORE_CONN_CREATE: printk("CORE_CONN_CREATE_RSP\n"); break;                 // TODO details
-            case CORE_CONN_CLOSE: printk("CORE_CONN_CLOSE_RSP\n"); break;                   // TODO details
-            case CORE_SET_POWER_SUB_STATE: printk("CORE_SET_POWER_SUB_STATE_RSP\n"); break; // TODO details
-            default: printk("[WARN] Response unknown for Core OID: 0x%02x\n", msg.oid); break;
+            case CORE_GET_CONFIG: printf("CORE_GET_CONFIG_RSP\n"); break;                   // TODO details
+            case CORE_CONN_CREATE: printf("CORE_CONN_CREATE_RSP\n"); break;                 // TODO details
+            case CORE_CONN_CLOSE: printf("CORE_CONN_CLOSE_RSP\n"); break;                   // TODO details
+            case CORE_SET_POWER_SUB_STATE: printf("CORE_SET_POWER_SUB_STATE_RSP\n"); break; // TODO details
+            default: printf("[WARN] Response unknown for Core OID: 0x%02x\n", msg.oid); break;
             }
             break;
         case CMD_GID_RF:
             switch (msg.oid) {
             case RF_DISCOVER_MAP:
-                printk("RF_DISCOVER_MAP_RSP (");
+                printf("RF_DISCOVER_MAP_RSP (");
                 print_status(msg.payload[0]);
-                printk(")\n");
+                printf(")\n");
                 break;
             case RF_SET_LISTEN_MODE_ROUTING:
-                printk("RF_SET_LISTEN_MODE_ROUTING_RSP (");
+                printf("RF_SET_LISTEN_MODE_ROUTING_RSP (");
                 print_status(msg.payload[0]);
-                printk(")\n");
+                printf(")\n");
                 break;
             case RF_GET_LISTEN_MODE_ROUTING:
-                printk("RF_GET_LISTEN_MODE_ROUTING_RSP (");
+                printf("RF_GET_LISTEN_MODE_ROUTING_RSP (");
                 print_status(msg.payload[0]);
-                printk(")\n");
+                printf(")\n");
                 break;
             case RF_DISCOVER:
-                printk("RF_DISCOVER_RSP (");
+                printf("RF_DISCOVER_RSP (");
                 print_status(msg.payload[0]);
-                printk(")\n");
+                printf(")\n");
                 break;
-            case RF_DISCOVER_SELECT: printk("RF_DISCOVER_SELECT_RSP\n"); break;                   // TODO details
-            case RF_DEACTIVATE: printk("RF_DEACTIVATE_RSP\n"); break;                             // TODO details
-            case RF_T3T_POLLING: printk("RF_T3T_POLLING_RSP\n"); break;                           // TODO details
-            case RF_PARAMETER_UPDATE: printk("RF_PARAMETER_UPDATE_RSP\n"); break;                 // TODO details
-            case RF_INTF_EXT_START: printk("RF_INTF_EXT_START_RSP\n"); break;                     // TODO details
-            case RF_INTF_EXT_STOP: printk("RF_INTF_EXT_STOP_RSP\n"); break;                       // TODO details
-            case RF_EXT_AGG_ABORT: printk("RF_EXT_AGG_ABORT_RSP\n"); break;                       // TODO details
-            case RF_NDEF_ABORT: printk("RF_NDEF_ABORT_RSP\n"); break;                             // TODO details
-            case RF_ISO_DEP_NAK_PRESENCE: printk("RF_ISO_DEP_NAK_PRESENCE_RSP\n"); break;         // TODO details
-            case RF_SET_FORCED_NFCEE_ROUTING: printk("RF_SET_FORCED_NFCEE_ROUTING_RSP\n"); break; // TODO details
-            case RF_REMOVAL_DETECTION: printk("RF_REMOVAL_DETECTION_RSP\n"); break;               // TODO details
-            case GET_WLCP_INFO_PARAM: printk("RF_GET_WLCP_INFO_PARAM_RSP\n"); break;              // TODO details
-            case WPT_START: printk("RF_WPT_START_RSP\n"); break;                                  // TODO details
-            default: printk("[WARN] Response unknown for RF management OID: 0x%02x\n", msg.oid); break;
+            case RF_DISCOVER_SELECT: printf("RF_DISCOVER_SELECT_RSP\n"); break;                   // TODO details
+            case RF_DEACTIVATE: printf("RF_DEACTIVATE_RSP\n"); break;                             // TODO details
+            case RF_T3T_POLLING: printf("RF_T3T_POLLING_RSP\n"); break;                           // TODO details
+            case RF_PARAMETER_UPDATE: printf("RF_PARAMETER_UPDATE_RSP\n"); break;                 // TODO details
+            case RF_INTF_EXT_START: printf("RF_INTF_EXT_START_RSP\n"); break;                     // TODO details
+            case RF_INTF_EXT_STOP: printf("RF_INTF_EXT_STOP_RSP\n"); break;                       // TODO details
+            case RF_EXT_AGG_ABORT: printf("RF_EXT_AGG_ABORT_RSP\n"); break;                       // TODO details
+            case RF_NDEF_ABORT: printf("RF_NDEF_ABORT_RSP\n"); break;                             // TODO details
+            case RF_ISO_DEP_NAK_PRESENCE: printf("RF_ISO_DEP_NAK_PRESENCE_RSP\n"); break;         // TODO details
+            case RF_SET_FORCED_NFCEE_ROUTING: printf("RF_SET_FORCED_NFCEE_ROUTING_RSP\n"); break; // TODO details
+            case RF_REMOVAL_DETECTION: printf("RF_REMOVAL_DETECTION_RSP\n"); break;               // TODO details
+            case GET_WLCP_INFO_PARAM: printf("RF_GET_WLCP_INFO_PARAM_RSP\n"); break;              // TODO details
+            case WPT_START: printf("RF_WPT_START_RSP\n"); break;                                  // TODO details
+            default: printf("[WARN] Response unknown for RF management OID: 0x%02x\n", msg.oid); break;
             }
             break;
         case CMD_GID_NFCEE_MGMT:
             switch (msg.oid) {
-            case NFCEE_DISCOVER: printk("NFCEE_DISCOVER_RSP\n"); break;                         // TODO details
-            case NFCEE_MODE_SET: printk("NFCEE_MODE_SET_RSP\n"); break;                         // TODO details
-            case NFCEE_STATUS: printk("NFCEE_STATUS_RSP\n"); break;                             // TODO details
-            case NFCEE_POWER_AND_LINK_CNTRL: printk("NFCEE_POWER_AND_LINK_CNTRL_RSP\n"); break; // TODO details
-            default: printk("[WARN] Response unknown for NFCEE management OID: 0x%02x\n", msg.oid); break;
+            case NFCEE_DISCOVER: printf("NFCEE_DISCOVER_RSP\n"); break;                         // TODO details
+            case NFCEE_MODE_SET: printf("NFCEE_MODE_SET_RSP\n"); break;                         // TODO details
+            case NFCEE_STATUS: printf("NFCEE_STATUS_RSP\n"); break;                             // TODO details
+            case NFCEE_POWER_AND_LINK_CNTRL: printf("NFCEE_POWER_AND_LINK_CNTRL_RSP\n"); break; // TODO details
+            default: printf("[WARN] Response unknown for NFCEE management OID: 0x%02x\n", msg.oid); break;
             }
             break;
-        case CMD_GID_NFCC_MGMT: printk("No NFCC management responses known.\n"); break;
-        case CMD_GID_TEST_MGMT: printk("No test management responses known.\n"); break;
-        default: printk("[WARN] NCI control GID 0x%01x unknown.\n", msg_buf[0] & 0xf); break;
+        case CMD_GID_NFCC_MGMT: printf("No NFCC management responses known.\n"); break;
+        case CMD_GID_TEST_MGMT: printf("No test management responses known.\n"); break;
+        default: printf("[WARN] NCI control GID 0x%01x unknown.\n", msg_buf[0] & 0xf); break;
         }
     } else if (mt == MT_NTF) {
         struct nci_control_msg msg = nci_parse_control_msg_standalone(msg_buf);
         if (msg.pkg_boundary_flag) {
-            printk("[PBF] ");
+            printf("[PBF] ");
         }
         switch (msg.gid) {
         case CMD_GID_CORE:
             switch (msg.oid) {
-            case CORE_RESET: printk("CORE_RESET_NTF\n"); break;                     // TODO details
-            case CORE_CONN_CREDITS: printk("CORE_CONN_CREDITS_NTF\n"); break;       // TODO details
-            case CORE_GENERIC_ERROR: printk("CORE_GENERIC_ERROR_NTF\n"); break;     // TODO details
-            case CORE_INTERFACE_ERROR: printk("CORE_INTERFACE_ERROR_NTF\n"); break; // TODO details
-            default: printk("[WARN] Notification unknown for Core OID: 0x%02x\n", msg.oid); break;
+            case CORE_RESET: printf("CORE_RESET_NTF\n"); break;                     // TODO details
+            case CORE_CONN_CREDITS: printf("CORE_CONN_CREDITS_NTF\n"); break;       // TODO details
+            case CORE_GENERIC_ERROR: printf("CORE_GENERIC_ERROR_NTF\n"); break;     // TODO details
+            case CORE_INTERFACE_ERROR: printf("CORE_INTERFACE_ERROR_NTF\n"); break; // TODO details
+            default: printf("[WARN] Notification unknown for Core OID: 0x%02x\n", msg.oid); break;
             }
             break;
         case CMD_GID_RF:
             switch (msg.oid) {
-            case RF_GET_LISTEN_MODE_ROUTING: printk("RF_GET_LISTEN_MODE_ROUTING_NTF\n"); break; // TODO details
-            case RF_DISCOVER: printk("RF_DISCOVER_NTF\n"); break;                               // TODO details
+            case RF_GET_LISTEN_MODE_ROUTING: printf("RF_GET_LISTEN_MODE_ROUTING_NTF\n"); break; // TODO details
+            case RF_DISCOVER: printf("RF_DISCOVER_NTF\n"); break;                               // TODO details
             case RF_INTF_ACTIVATED: {
-                printk("RF_INTF_ACTIVATED_NTF\n");
-                printk("\tRF Discovery ID: %02x\n", msg.payload[0]);
-                printk("\tRF Interface: ");
+                printf("RF_INTF_ACTIVATED_NTF\n");
+                printf("\tRF Discovery ID: %02x\n", msg.payload[0]);
+                printf("\tRF Interface: ");
                 uint8_t rf_intf = msg.payload[1];
                 print_rf_interface(rf_intf);
-                printk("\n");
-                printk("\tRF Protocol: ");
+                printf("\n");
+                printf("\tRF Protocol: ");
                 uint8_t rf_proto = msg.payload[2];
                 print_rf_protocol(rf_proto);
-                printk("\n");
-                printk("\tActivation RF Technology and Mode: ");
+                printf("\n");
+                printf("\tActivation RF Technology and Mode: ");
                 print_technology_mode(msg.payload[3]);
-                printk("\n");
-                printk("\tMax Data Packet Payload Size: %i\n", msg.payload[4]);
-                printk("\tInitial Number of Credits: %i\n", msg.payload[5]);
+                printf("\n");
+                printf("\tMax Data Packet Payload Size: %i\n", msg.payload[4]);
+                printf("\tInitial Number of Credits: %i\n", msg.payload[5]);
                 uint8_t techno_params_len = msg.payload[6];
                 if (techno_params_len > 0) {
-                    printk("\tTechnology specific params (%i bytes):\n\t\t", msg.payload[5]);
+                    printf("\tTechnology specific params (%i bytes):\n\t\t", msg.payload[5]);
                     hexdump(&msg.payload[7], techno_params_len); // TODO make human readble
-                    printk("\n");
+                    printf("\n");
                 } else {
-                    printk("\tNo technology specific params.\n");
+                    printf("\tNo technology specific params.\n");
                 }
-                printk("\tData Exchange RF Technology and Mode: ");
+                printf("\tData Exchange RF Technology and Mode: ");
                 uint8_t rf_techno_mode = msg.payload[7 + techno_params_len];
                 print_technology_mode(rf_techno_mode);
-                printk("\n");
-                printk("\tData Exchange Transmit Rate: ");
+                printf("\n");
+                printf("\tData Exchange Transmit Rate: ");
                 print_bitrate(msg.payload[8 + techno_params_len]);
-                printk("\n");
-                printk("\tData Exchange Receive Rate: ");
+                printf("\n");
+                printf("\tData Exchange Receive Rate: ");
                 print_bitrate(msg.payload[9 + techno_params_len]);
-                printk("\n");
+                printf("\n");
                 uint8_t activation_params_len = msg.payload[10 + techno_params_len];
                 if (activation_params_len > 0) {
-                    printk("\tActivation Parameters (%i bytes):\n", activation_params_len);
+                    printf("\tActivation Parameters (%i bytes):\n", activation_params_len);
                     if (rf_intf == RF_INTF_ISO_DEP) {
                         if (rf_techno_mode == NFC_A_PASSIVE_POLL_MODE) {
-                            printk("\t\tRATS response (%i bytes): ", msg.payload[11 + techno_params_len]);
+                            printf("\t\tRATS response (%i bytes): ", msg.payload[11 + techno_params_len]);
                             hexdump(&msg.payload[12 + techno_params_len], activation_params_len - 1);
-                            printk("\n");
+                            printf("\n");
                         } else if (rf_techno_mode == NFC_B_PASSIVE_POLL_MODE) {
-                            printk("\t\tATTRIB response (%i bytes): ", msg.payload[11 + techno_params_len]);
+                            printf("\t\tATTRIB response (%i bytes): ", msg.payload[11 + techno_params_len]);
                             hexdump(&msg.payload[12 + techno_params_len],
                                     activation_params_len - 1); // TODO make human readable
-                            printk("\n");
+                            printf("\n");
                         } else if (rf_techno_mode == NFC_A_PASSIVE_LISTEN_MODE) {
-                            printk("\t\tRATS PARAM: %02x\n",
+                            printf("\t\tRATS PARAM: %02x\n",
                                    msg.payload[11 + techno_params_len]); // TODO? make human readable
                         } else if (rf_techno_mode == NFC_B_PASSIVE_LISTEN_MODE) {
-                            printk("\t\tATTRIB Command (%i bytes): ", msg.payload[11 + techno_params_len]);
+                            printf("\t\tATTRIB Command (%i bytes): ", msg.payload[11 + techno_params_len]);
                             hexdump(&msg.payload[12 + techno_params_len],
                                     activation_params_len - 1); // TODO make params human readable
                             const uint8_t *params = &msg.payload[16 + techno_params_len];
                             // TODO check for matching NFCID0
-                            printk("\n\t\t\tParam 1 (0x%02x): ", params[0]);
-                            printk("TR0: ");
+                            printf("\n\t\t\tParam 1 (0x%02x): ", params[0]);
+                            printf("TR0: ");
                             switch ((params[0] & 0xc0) >> 6) {
-                            case 0: printk("default"); break;
-                            case 1: printk("48 * 16/fc"); break;
-                            case 2: printk("16 * 16/fc"); break;
-                            default: printk("unknown"); break;
+                            case 0: printf("default"); break;
+                            case 1: printf("48 * 16/fc"); break;
+                            case 2: printf("16 * 16/fc"); break;
+                            default: printf("unknown"); break;
                             }
-                            printk(", TR1: ");
+                            printf(", TR1: ");
                             switch ((params[0] & 0x30) >> 4) {
-                            case 0: printk("default"); break;
-                            case 1: printk("48 * 16/fc"); break;
-                            case 2: printk("16 * 16/fc"); break;
-                            default: printk("unknown"); break;
+                            case 0: printf("default"); break;
+                            case 1: printf("48 * 16/fc"); break;
+                            case 2: printf("16 * 16/fc"); break;
+                            default: printf("unknown"); break;
                             }
                             if (params[0] & 0x08) {
-                                printk(", EoS supressed");
+                                printf(", EoS supressed");
                             } else {
-                                printk(", EoS required");
+                                printf(", EoS required");
                             }
                             if (params[0] & 0x04) {
-                                printk(", SoS supressed");
+                                printf(", SoS supressed");
                             } else {
-                                printk(", SoS required");
+                                printf(", SoS required");
                             }
-                            printk("\n\t\t\tParam 2 (0x%02x): ", params[1]);
-                            printk("bit rate D_listen->poll: ");
+                            printf("\n\t\t\tParam 2 (0x%02x): ", params[1]);
+                            printf("bit rate D_listen->poll: ");
                             switch ((params[1] & 0xc0) >> 6) {
-                            case 0: printk("1"); break;
-                            case 1: printk("2"); break;
-                            case 2: printk("4"); break;
-                            case 3: printk("8"); break;
+                            case 0: printf("1"); break;
+                            case 1: printf("2"); break;
+                            case 2: printf("4"); break;
+                            case 3: printf("8"); break;
                             }
-                            printk(", bit rate D_poll->listen: ");
+                            printf(", bit rate D_poll->listen: ");
                             switch ((params[1] & 0x30) >> 4) {
-                            case 0: printk("1"); break;
-                            case 1: printk("2"); break;
-                            case 2: printk("4"); break;
-                            case 3: printk("8"); break;
+                            case 0: printf("1"); break;
+                            case 1: printf("2"); break;
+                            case 2: printf("4"); break;
+                            case 3: printf("8"); break;
                             }
                             uint8_t fsdi = params[1] & 0x0f;
                             int fsd = 0;
@@ -507,80 +507,80 @@ void Nci::nci_debug(const uint8_t *msg_buf) {
                             case 7: fsd = 128; break;
                             case 8: fsd = 256; break;
                             }
-                            printk(",\n\t\t\t\t maximum frame size (FSD): %i bytes", fsd);
-                            printk("\n\t\t\tParam 3 (0x%02x): ", params[2]);
-                            printk("Minimum TR2: ");
+                            printf(",\n\t\t\t\t maximum frame size (FSD): %i bytes", fsd);
+                            printf("\n\t\t\tParam 3 (0x%02x): ", params[2]);
+                            printf("Minimum TR2: ");
                             switch ((params[2] & 0x06) >> 1) {
-                            case 0: printk("default"); break;
-                            case 1: printk("48 * 16/fc"); break;
-                            case 2: printk("16 * 16/fc"); break;
-                            default: printk("unknown"); break;
+                            case 0: printf("default"); break;
+                            case 1: printf("48 * 16/fc"); break;
+                            case 2: printf("16 * 16/fc"); break;
+                            default: printf("unknown"); break;
                             }
                             if (params[2] & 0x01) {
-                                printk(",\n\t\t\t\t Device in Listen Mode ISO/IEC 14443 compliant.");
+                                printf(",\n\t\t\t\t Device in Listen Mode ISO/IEC 14443 compliant.");
                             } else {
-                                printk(",\n\t\t\t\t Device in Listen Mode *NOT* ISO/IEC 14443 compliant.");
+                                printf(",\n\t\t\t\t Device in Listen Mode *NOT* ISO/IEC 14443 compliant.");
                             }
-                            printk("\n\t\t\tParam 4 (0x%02x): DID: 0x%01x", params[3], params[3] & 0x0f);
-                            printk("\n");
+                            printf("\n\t\t\tParam 4 (0x%02x): DID: 0x%01x", params[3], params[3] & 0x0f);
+                            printf("\n");
                         }
                     } else if (rf_intf == RF_INTF_NFC_DEP) {
                         if (rf_techno_mode == NFC_A_PASSIVE_POLL_MODE || rf_techno_mode == NFC_F_PASSIVE_POLL_MODE ||
                             rf_techno_mode == NFC_ACTIVE_POLL_MODE) {
                             uint8_t atr_res_len = msg.payload[11 + techno_params_len];
-                            printk("\t\tATR_RES Response (%i bytes): ", atr_res_len);
+                            printf("\t\tATR_RES Response (%i bytes): ", atr_res_len);
                             hexdump(&msg.payload[12 + techno_params_len], atr_res_len);
-                            printk("\n");
-                            printk("\t\tData Exchange Length Reduction: %02x",
+                            printf("\n");
+                            printf("\t\tData Exchange Length Reduction: %02x",
                                    msg.payload[12 + techno_params_len + atr_res_len]); // TODO make human readable
                         } else if (rf_techno_mode == NFC_A_PASSIVE_LISTEN_MODE ||
                                    rf_techno_mode == NFC_F_PASSIVE_LISTEN_MODE ||
                                    rf_techno_mode == NFC_ACTIVE_LISTEN_MODE) {
-                            printk("\t\t"); // TODO implement
+                            printf("\t\t"); // TODO implement
                         }
                     }
                 } else {
-                    printk("\tNo activation parameters.");
+                    printf("\tNo activation parameters.");
                 }
             } break;
-            case RF_DEACTIVATE: printk("RF_DEACTIVATE_NTF\n"); break;
+            case RF_DEACTIVATE: printf("RF_DEACTIVATE_NTF\n"); break;
             case RF_FIELD_INFO:
-                printk("RF_FIELD_INFO_NTF ");
+                printf("RF_FIELD_INFO_NTF ");
                 if (msg.payload[0] & 0x01) {
-                    printk("(Operating Field generated by Remote NFC Endpoint)\n");
+                    printf("(Operating Field generated by Remote NFC Endpoint)\n");
                 } else {
-                    printk("(No Operating Field generated by Remote NFC Endpoint)\n");
+                    printf("(No Operating Field generated by Remote NFC Endpoint)\n");
                 }
                 break;
-            case RF_T3T_POLLING: printk("RF_T3T_POLLING_NTF\n"); break;                   // TODO details
-            case RF_NFCEE_ACTION: printk("RF_NFCEE_ACTION_NTF\n"); break;                 // TODO details
-            case RF_NFCEE_DISCOVERY_REQ: printk("RF_NFCEE_DISCOVERY_REQ_NTF\n"); break;   // TODO details
-            case RF_ISO_DEP_NAK_PRESENCE: printk("RF_ISO_DEP_NAK_PRESENCE_NTF\n"); break; // TODO details
-            case RF_REMOVAL_DETECTION: printk("RF_REMOVAL_DETECTION_NTF\n"); break;       // TODO details
-            case RF_WLC_STATUS: printk("RF_WLC_STATUS_NTF\n"); break;                     // TODO details
-            case GET_WLCP_INFO_PARAM: printk("GET_WLCP_INFO_PARAM_NTF\n"); break;         // TODO details
-            case WPT_START: printk("WPT_START_NTF\n"); break;                             // TODO details
-            default: printk("[WARN] Notification unknown for RF management OID: 0x%02x\n", msg.oid); break;
+            case RF_T3T_POLLING: printf("RF_T3T_POLLING_NTF\n"); break;                   // TODO details
+            case RF_NFCEE_ACTION: printf("RF_NFCEE_ACTION_NTF\n"); break;                 // TODO details
+            case RF_NFCEE_DISCOVERY_REQ: printf("RF_NFCEE_DISCOVERY_REQ_NTF\n"); break;   // TODO details
+            case RF_ISO_DEP_NAK_PRESENCE: printf("RF_ISO_DEP_NAK_PRESENCE_NTF\n"); break; // TODO details
+            case RF_REMOVAL_DETECTION: printf("RF_REMOVAL_DETECTION_NTF\n"); break;       // TODO details
+            case RF_WLC_STATUS: printf("RF_WLC_STATUS_NTF\n"); break;                     // TODO details
+            case GET_WLCP_INFO_PARAM: printf("GET_WLCP_INFO_PARAM_NTF\n"); break;         // TODO details
+            case WPT_START: printf("WPT_START_NTF\n"); break;                             // TODO details
+            default: printf("[WARN] Notification unknown for RF management OID: 0x%02x\n", msg.oid); break;
             }
             break;
         case CMD_GID_NFCEE_MGMT:
             switch (msg.oid) {
-            case NFCEE_DISCOVER: printk("NFCEE_DISCOVER_NTF\n"); break; // TODO details
-            case NFCEE_MODE_SET: printk("NFCEE_MODE_SET_NTF\n"); break; // TODO details
-            case NFCEE_STATUS: printk("NFCEE_STATUS_NTF\n"); break;     // TODO details
-            default: printk("[WARN] Notification unknown for NFCEE management OID: 0x%02x\n", msg.oid); break;
+            case NFCEE_DISCOVER: printf("NFCEE_DISCOVER_NTF\n"); break; // TODO details
+            case NFCEE_MODE_SET: printf("NFCEE_MODE_SET_NTF\n"); break; // TODO details
+            case NFCEE_STATUS: printf("NFCEE_STATUS_NTF\n"); break;     // TODO details
+            default: printf("[WARN] Notification unknown for NFCEE management OID: 0x%02x\n", msg.oid); break;
             }
             break;
-        case CMD_GID_NFCC_MGMT: printk("No NFCC management notifications known.\n"); break;
-        case CMD_GID_TEST_MGMT: printk("No test management notifications known.\n"); break;
-        default: printk("[WARN] NCI control GID 0x%01x unknown.\n", msg_buf[0] & 0xf); break;
+        case CMD_GID_NFCC_MGMT: printf("No NFCC management notifications known.\n"); break;
+        case CMD_GID_TEST_MGMT: printf("No test management notifications known.\n"); break;
+        default: printf("[WARN] NCI control GID 0x%01x unknown.\n", msg_buf[0] & 0xf); break;
         }
     } else {
         struct nci_data_msg msg = nci_parse_data_msg_standalone(msg_buf);
         if (msg.pkg_boundary_flag) {
-            printk("[PBF] ");
+            printf("[PBF] ");
         }
-        printk("Data message (Conn ID: 0x%01x; %i credits)\n", msg.conn_id, msg.credits);
+        printf("Data message (Conn ID: 0x%01x; %i credits)\n", msg.conn_id, msg.credits);
         // TODO this feature would theoretically also take an extra arg for the protocol
     }
 }

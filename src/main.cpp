@@ -27,6 +27,13 @@ static const struct gpio_dt_spec led_user2 = GPIO_DT_SPEC_GET(DT_NODELABEL(led_u
 static const struct gpio_dt_spec nfcc_ven = GPIO_DT_SPEC_GET(DT_NODELABEL(nfcc_ven), gpios);
 static const struct gpio_dt_spec nfcc_irq = GPIO_DT_SPEC_GET(DT_NODELABEL(nfcc_irq), gpios);
 
+static const struct device *i2c_dev = DEVICE_DT_GET(DT_NODELABEL(i2c0));
+static const struct i2c_dt_spec pn7150_i2c = I2C_DT_SPEC_GET(DT_NODELABEL(pn7150));
+
+static uint8_t read_buf[256] = {0};
+
+static ExampleNci nci = ExampleNci(pn7150_i2c, nfcc_irq, read_buf);
+
 BUILD_ASSERT(DT_NODE_HAS_COMPAT(DT_CHOSEN(zephyr_console), zephyr_cdc_acm_uart), "Device is not ACM CDC UART device");
 
 int serial_init() {
@@ -63,7 +70,7 @@ void nfcc_irq_handler(const struct device *dev, struct gpio_callback *cb, uint32
     int irq_val = gpio_pin_get_dt(&nfcc_irq);
 
 #if DEBUG_NFCC_IRQ
-    printk("+++ IRQ=%i +++\n", irq_val);
+    printf("+++ IRQ=%i +++\n", irq_val);
 #endif
 
     gpio_pin_set_dt(&led_user2, irq_val);
@@ -73,12 +80,10 @@ void nfcc_irq_handler(const struct device *dev, struct gpio_callback *cb, uint32
 int main(void) {
     int ret = 0; // buffer for function return values
 
-    /*
     ret = serial_init();
     if (ret != 0) {
         return ret;
     }
-    */
 
     // BEGIN Buttons
 
@@ -135,20 +140,20 @@ int main(void) {
     }
 
     if (!pwm_is_ready_dt(&pwm_led_user0)) {
-        printk("Error: PWM device %s is not ready\n", pwm_led_user0.dev->name);
+        printf("Error: PWM device %s is not ready\n", pwm_led_user0.dev->name);
         return 0;
     } else {
         puts("Got User LED 0 PWM.");
     }
     if (!pwm_is_ready_dt(&pwm_led_user1)) {
-        printk("Error: PWM device %s is not ready\n", pwm_led_user1.dev->name);
+        printf("Error: PWM device %s is not ready\n", pwm_led_user1.dev->name);
         return 0;
     } else {
         puts("Got User LED 1 PWM.");
     }
 
     if (!pwm_is_ready_dt(&pwm_led_user2)) {
-        printk("Error: PWM device %s is not ready\n", pwm_led_user2.dev->name);
+        printf("Error: PWM device %s is not ready\n", pwm_led_user2.dev->name);
         return 0;
     } else {
         puts("Got User LED 2 PWM.");
@@ -175,7 +180,7 @@ int main(void) {
 
     ret = gpio_pin_configure(nfcc_ven.port, nfcc_ven.pin, GPIO_OUTPUT);
     if (ret) {
-        printk("Could not configure NFCC's VEN (%i).\n", ret);
+        printf("Could not configure NFCC's VEN (%i).\n", ret);
         return ret;
     } else {
         puts("Set NFCC's VEN config.");
@@ -183,7 +188,7 @@ int main(void) {
 
     ret = gpio_pin_configure(nfcc_irq.port, nfcc_irq.pin, GPIO_INPUT | GPIO_PULL_DOWN);
     if (ret) {
-        printk("Could not configure NFCC's IRQ (%i).\n", ret);
+        printf("Could not configure NFCC's IRQ (%i).\n", ret);
         return ret;
     } else {
         puts("Set NFCC's IRQ config.");
@@ -191,7 +196,7 @@ int main(void) {
 
     ret = gpio_pin_set_dt(&nfcc_ven, 1);
     if (ret) {
-        printk("Could not set NFCC's VEN (%i).\n", ret);
+        printf("Could not set NFCC's VEN (%i).\n", ret);
         return ret;
     } else {
         puts("Set NFCC's VEN to ACTIVE.");
@@ -219,9 +224,6 @@ int main(void) {
     // END GPIO Interrupts
     // BEGIN I2C setup
 
-    const struct device *i2c_dev = DEVICE_DT_GET(DT_NODELABEL(i2c0));
-    const struct i2c_dt_spec pn7150_i2c = I2C_DT_SPEC_GET(DT_NODELABEL(pn7150));
-
     ret = (i2c_dev == NULL || !device_is_ready(i2c_dev));
     if (ret) {
         puts("Could not get I2C controller device.");
@@ -245,7 +247,7 @@ int main(void) {
 
     ret = i2c_configure(i2c_dev, i2c_cfg);
     if (ret) {
-        printk("i2c_configure failed: %i\n", ret);
+        printf("i2c_configure failed: %i\n", ret);
     } else {
         puts("I2C config set successfully.");
     }
@@ -254,11 +256,11 @@ int main(void) {
     if (ret == -88) {
         puts("Config get not supported. (ENOSYS returned)");
     } else if (ret) {
-        printk("Could not get controller config. (%i)", ret);
+        printf("Could not get controller config. (%i)", ret);
         return ret;
     } else {
         if (i2c_cfg_tmp != i2c_cfg) {
-            printk("Config was not set correctly.");
+            printf("Config was not set correctly.");
             hexdump("\nretreived: ", (uint8_t *)&i2c_cfg_tmp, 4);
             hexdump("\nintended: ", (uint8_t *)&i2c_cfg, 4);
             puts("");
@@ -267,17 +269,12 @@ int main(void) {
     }
     // END I2C setup
     // yippie, working i2c!
-
-    ExampleNci nci = ExampleNci(pn7150_i2c, nfcc_irq);
-
-    puts("juhuu 1");
+    
     nci.nfcc_setup();
 
-    puts("juhuu 2");
     //nci.nfca_nfc_dep_setup();
     //nci.nfca_iso_dep_setup();
     nci.nfcb_iso_dep_setup();
-    puts("juhuu 3");
 
     // TODO adjust dynamically based on period from dt
     uint32_t pwm_min_pulse = PWM_NSEC(5000);
@@ -288,7 +285,7 @@ int main(void) {
     while (true) {
         pwm_set_pulse_dt(&pwm_led_user0, pulse);
         pulse = dir ? pulse / 1.1 : pulse * 1.1;
-        if (dir && pulse < pwm_min_pulse || !dir && pulse > pwm_max_pulse) {
+        if ((dir && pulse < pwm_min_pulse) || (!dir && pulse > pwm_max_pulse)) {
             dir = !dir;
         }
 

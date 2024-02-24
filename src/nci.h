@@ -241,18 +241,21 @@ enum rf_state {
 
 class Nci {
   public:
-    Nci(const struct i2c_dt_spec &i2c, const struct gpio_dt_spec &irq_gpio);
+    Nci(const struct i2c_dt_spec i2c, const struct gpio_dt_spec irq_gpio, uint8_t *read_buf);
     ~Nci();
 
     int nci_read();
     int nci_write(const uint8_t *cmd);
     int nci_write_read(const uint8_t *cmd);
     void nci_debug(const uint8_t *msg_buf);
-    uint8_t read_buf[256] = {0};
+
+    //TODO I honestly don't understand why i can't do the latter one without the mcu deadlocking but whatever...
+    uint8_t *read_buf;
+    //uint8_t read_buf[260] = {0};
     
     // TODO protect this
-    const struct i2c_dt_spec &i2c;
-    const struct gpio_dt_spec &irq;
+    const struct i2c_dt_spec i2c;
+    const struct gpio_dt_spec irq;
 
   protected:
     struct nci_control_msg nci_parse_control_msg_standalone(const uint8_t *msg_buf);

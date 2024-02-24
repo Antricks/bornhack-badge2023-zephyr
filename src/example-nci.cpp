@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include "example-nci.h"
 
-ExampleNci::ExampleNci(const struct i2c_dt_spec &i2c, const struct gpio_dt_spec &irq_gpio) : Nci(i2c, irq_gpio) {}
+ExampleNci::ExampleNci(const struct i2c_dt_spec i2c, const struct gpio_dt_spec irq_gpio, uint8_t *read_buf) : Nci(i2c, irq_gpio, read_buf) {}
 ExampleNci::~ExampleNci() {}
 
 int ExampleNci::nfca_iso_dep_setup() {
@@ -138,20 +138,16 @@ int ExampleNci::nfcb_iso_dep_setup() {
 }
 
 int ExampleNci::nfcc_setup() {
-    puts("juhuu 1.1");
     const uint8_t core_reset_cmd[] = {CORE_CMD, CORE_RESET, 1, 1}; // CORE_RESET_CMD(0x01), reset config
     nci_write_read(core_reset_cmd);
     // TODO handle response
-    puts("juhuu 1.2");
 
     const uint8_t core_init_cmd[] = {CORE_CMD, 0x01, 0};
     nci_write_read(core_init_cmd);
     // TODO handle response
-    puts("juhuu 1.3");
 
     const uint8_t prop_act_cmd[] = {MT_CMD | 0xf, 0x02, 0}; // gid 0x0f seems to be some proprietary thing I just stole from the micropython demo
     nci_write_read(prop_act_cmd);
     // TODO handle response
-    puts("juhuu 1.4");
     return 0;
 }
