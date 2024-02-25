@@ -105,8 +105,8 @@ void print_status(const uint8_t status) {
     }
 }
 
-Nci::Nci(const struct i2c_dt_spec i2c, const struct gpio_dt_spec irq_gpio, uint8_t *read_buf)
-    : read_buf(read_buf), i2c(i2c), irq(irq_gpio) {}
+Nci::Nci(const struct i2c_dt_spec i2c, const struct gpio_dt_spec irq_gpio)
+    : i2c(i2c), irq(irq_gpio) {}
 Nci::~Nci() {}
 
 struct nci_control_msg {
@@ -377,10 +377,14 @@ void Nci::nci_debug(const uint8_t *msg_buf) {
             switch (msg.gid) {
             case CMD_GID_CORE:
                 switch (msg.oid) {
-                case CORE_RESET: printf("CORE_RESET_NTF\n"); break;                     // TODO details
-                case CORE_CONN_CREDITS: printf("CORE_CONN_CREDITS_NTF\n"); break;       // TODO details
-                case CORE_GENERIC_ERROR: printf("CORE_GENERIC_ERROR_NTF\n"); break;     // TODO details
-                case CORE_INTERFACE_ERROR: printf("CORE_INTERFACE_ERROR_NTF\n"); break; // TODO details
+                case CORE_RESET: printf("CORE_RESET_NTF\n"); break;                 // TODO details
+                case CORE_CONN_CREDITS: printf("CORE_CONN_CREDITS_NTF\n"); break;   // TODO details
+                case CORE_GENERIC_ERROR: printf("CORE_GENERIC_ERROR_NTF\n"); break; // TODO details
+                case CORE_INTERFACE_ERROR:
+                    printf("CORE_INTERFACE_ERROR_NTF (");
+                    print_status(msg.payload[0]);
+                    printf(") - Connection ID: %i\n", msg.payload[1] & 0x0f);
+                    break;
                 default: printf("[WARN] Notification unknown for Core OID: 0x%02x\n", msg.oid); break;
                 }
                 break;

@@ -30,9 +30,7 @@ static const struct gpio_dt_spec nfcc_irq = GPIO_DT_SPEC_GET(DT_NODELABEL(nfcc_i
 static const struct device *i2c_dev = DEVICE_DT_GET(DT_NODELABEL(i2c0));
 static const struct i2c_dt_spec pn7150_i2c = I2C_DT_SPEC_GET(DT_NODELABEL(pn7150));
 
-static uint8_t read_buf[256] = {0};
-
-static ExampleNci nci = ExampleNci(pn7150_i2c, nfcc_irq, read_buf);
+static ExampleNci nci = ExampleNci(pn7150_i2c, nfcc_irq);
 
 BUILD_ASSERT(DT_NODE_HAS_COMPAT(DT_CHOSEN(zephyr_console), zephyr_cdc_acm_uart), "Device is not ACM CDC UART device");
 

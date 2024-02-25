@@ -241,7 +241,8 @@ enum rf_state {
 
 class Nci {
   public:
-    Nci(const struct i2c_dt_spec i2c, const struct gpio_dt_spec irq_gpio, uint8_t *read_buf);
+    // TODO Improve abstraction here to not need to pass I2C here. The transport protocol shouldn't matter.
+    Nci(const struct i2c_dt_spec i2c, const struct gpio_dt_spec irq_gpio);
     ~Nci();
 
     int nci_read();
@@ -249,19 +250,15 @@ class Nci {
     int nci_write_read(const uint8_t *cmd);
     void nci_debug(const uint8_t *msg_buf);
 
-    //TODO I honestly don't understand why i can't do the latter one without the mcu deadlocking but whatever...
-    uint8_t *read_buf;
-    //uint8_t read_buf[260] = {0};
-    
-    // TODO protect this
+  protected:
+    uint8_t read_buf[255] = {0};
+    size_t read_buf_len = 255;
+
     const struct i2c_dt_spec i2c;
     const struct gpio_dt_spec irq;
 
-  protected:
     struct nci_control_msg nci_parse_control_msg_standalone(const uint8_t *msg_buf);
     struct nci_data_msg nci_parse_data_msg_standalone(const uint8_t *msg_buf);
-
-    size_t read_buf_len = 255;
 
     rf_state state;
     uint8_t rf_intf;
@@ -273,5 +270,3 @@ class Nci {
 
 // returns the expected overall length of an NCI packet according to packet header
 size_t expected_packet_length(const uint8_t *packet);
-
-void nci_debug(const uint8_t *msg_buf);

@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include "example-nci.h"
 
-ExampleNci::ExampleNci(const struct i2c_dt_spec i2c, const struct gpio_dt_spec irq_gpio, uint8_t *read_buf) : Nci(i2c, irq_gpio, read_buf) {}
+ExampleNci::ExampleNci(const struct i2c_dt_spec i2c, const struct gpio_dt_spec irq_gpio) : Nci(i2c, irq_gpio) {}
 ExampleNci::~ExampleNci() {}
 
 int ExampleNci::nfca_iso_dep_setup() {
