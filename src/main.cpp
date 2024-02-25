@@ -9,9 +9,9 @@
 #include <zephyr/sys/util.h>
 #include <zephyr/usb/usb_device.h>
 
+#include "config.h"
 #include "example-nci.h"
 #include "util.h"
-#include "config.h"
 
 static const struct gpio_dt_spec btn_user1 = GPIO_DT_SPEC_GET(DT_NODELABEL(btn_user1), gpios);
 static const struct gpio_dt_spec btn_user2 = GPIO_DT_SPEC_GET(DT_NODELABEL(btn_user2), gpios);
@@ -75,7 +75,6 @@ void nfcc_irq_handler(const struct device *dev, struct gpio_callback *cb, uint32
 
     gpio_pin_set_dt(&led_user2, irq_val);
 }
-
 
 int main(void) {
     int ret = 0; // buffer for function return values
@@ -269,11 +268,11 @@ int main(void) {
     }
     // END I2C setup
     // yippie, working i2c!
-    
+
     nci.nfcc_setup();
 
-    //nci.nfca_nfc_dep_setup();
-    //nci.nfca_iso_dep_setup();
+    // nci.nfca_nfc_dep_setup();
+    // nci.nfca_iso_dep_setup();
     nci.nfcb_iso_dep_setup();
 
     // TODO adjust dynamically based on period from dt
@@ -284,12 +283,12 @@ int main(void) {
 
     while (true) {
         pwm_set_pulse_dt(&pwm_led_user0, pulse);
-        pulse = dir ? pulse / 1.1 : pulse * 1.1;
+        pulse = dir ? pulse / 1.05 : pulse * 1.05;
         if ((dir && pulse < pwm_min_pulse) || (!dir && pulse > pwm_max_pulse)) {
             dir = !dir;
         }
 
-        k_msleep(50);
+        k_msleep(30);
 
         if (gpio_pin_get_dt(&nfcc_irq)) {
             nci.nci_read();
@@ -298,4 +297,3 @@ int main(void) {
 
     return 0;
 }
-
