@@ -6,11 +6,107 @@
 #include "nci.h"
 #include "util.h"
 
-Nci::Nci(const struct i2c_dt_spec i2c, const struct gpio_dt_spec irq_gpio, uint8_t *read_buf)
-    : i2c(i2c), irq(irq_gpio) {
-    this->read_buf = read_buf;
+void print_rf_technology(const uint8_t technology) {
+    switch (technology) {
+    case NFC_RF_TECHNOLOGY_A: printf("NFC-A"); break;
+    case NFC_RF_TECHNOLOGY_B: printf("NFC-B"); break;
+    case NFC_RF_TECHNOLOGY_F: printf("NFC-F"); break;
+    case NFC_RF_TECHNOLOGY_V: printf("NFC-V"); break;
+    default: printf("[unknown RF technology 0x%02x]", technology); break;
+    }
 }
 
+void print_technology_mode(const uint8_t technology_mode) {
+    switch (technology_mode) {
+    case NFC_A_PASSIVE_POLL_MODE: printf("NFC-A passive poll mode"); break;
+    case NFC_B_PASSIVE_POLL_MODE: printf("NFC-B passive poll mode"); break;
+    case NFC_F_PASSIVE_POLL_MODE: printf("NFC-F passive poll mode"); break;
+    case NFC_ACTIVE_POLL_MODE: printf("NFC active poll mode"); break;
+    case NFC_V_PASSIVE_POLL_MODE: printf("NFC-V passivle poll mode"); break;
+    case NFC_A_PASSIVE_LISTEN_MODE: printf("NFC-A passive listen mode"); break;
+    case NFC_B_PASSIVE_LISTEN_MODE: printf("NFC-B passive listen mode"); break;
+    case NFC_F_PASSIVE_LISTEN_MODE: printf("NFC-F passive listen mode"); break;
+    case NFC_ACTIVE_LISTEN_MODE: printf("NFC active listen mode"); break;
+    default: printf("[unknown NFC technology / mode 0x%02x]", technology_mode); break;
+    }
+}
+
+void print_bitrate(const uint8_t bitrate) {
+    switch (bitrate) {
+    case NFC_BIT_RATE_106: printf("106 kbit/s"); break;
+    case NFC_BIT_RATE_212: printf("212 kbit/s"); break;
+    case NFC_BIT_RATE_424: printf("424 kbit/s"); break;
+    case NFC_BIT_RATE_848: printf("848 kbit/s"); break;
+    case NFC_BIT_RATE_1695: printf("1695 kbit/s"); break;
+    case NFC_BIT_RATE_3390: printf("3390 kbit/s"); break;
+    case NFC_BIT_RATE_6780: printf("6780 kbit/s"); break;
+    case NFC_BIT_RATE_26: printf("26 kbit/s"); break;
+    default: printf("[unknown bitrate 0x%02x]", bitrate); break;
+    }
+}
+
+void print_rf_protocol(const uint8_t protocol) {
+    switch (protocol) {
+    case RF_PROTO_UNDETERMINED: printf("RF_PROTO_UNDETERMINED"); break;
+    case RF_PROTO_T1T_DEPRECATED: printf("T1T (deprecated)"); break;
+    case RF_PROTO_T2T: printf("T2T"); break;
+    case RF_PROTO_T3T: printf("T3T"); break;
+    case RF_PROTO_ISO_DEP: printf("ISO-DEP"); break;
+    case RF_PROTO_NFC_DEP: printf("NFC-DEP"); break;
+    case RF_PROTO_T5T: printf("T5T"); break;
+    case RF_PROTO_NDEF: printf("NDEF"); break;
+    case RF_PROTO_WLC: printf("WLC"); break;
+    default: printf("[unknown protocol 0x%02x]", protocol); break;
+    }
+}
+
+void print_rf_interface(const uint8_t intf) {
+    switch (intf) {
+    case RF_INTF_NFCEE_DIRECT: printf("NFCEE direct"); break;
+    case RF_INTF_FRAME: printf("Frame RF"); break;
+    case RF_INTF_ISO_DEP: printf("ISO-DEP"); break;
+    case RF_INTF_NFC_DEP: printf("NFC-DEP"); break;
+    case RF_INTF_NDEF: printf("NDEF"); break;
+    case RF_INTF_WLC_P_AUTONOMOUS: printf("WLC-P autonomous"); break;
+    default: printf("[unknown RF interface 0x%02x]", intf); break;
+    }
+}
+
+void print_status(const uint8_t status) {
+    switch (status) {
+    case STATUS_OK: printf("OK"); break;
+    case STATUS_REJECTED: printf("REJECTED"); break;
+    case STATUS_FAILED: printf("FAILED"); break;
+    case STATUS_NOT_INITIALIZED: printf("NOT_INITIALIZED"); break;
+    case STATUS_SYNTAX_ERROR: printf("SYNTAX_ERROR"); break;
+    case STATUS_SEMANTIC_ERROR: printf("SEMANTIC_ERROR"); break;
+    case STATUS_INVALID_PARAM: printf("INVALID_PARAM"); break;
+    case STATUS_MESSAGE_SIZE_EXCEEDED: printf("MESSAGE_SIZE_EXCEEDED"); break;
+    case STATUS_OK_1_BIT: printf("OK_1_BIT"); break;
+    case STATUS_OK_2_BIT: printf("OK_2_BIT"); break;
+    case STATUS_OK_3_BIT: printf("OK_3_BIT"); break;
+    case STATUS_OK_4_BIT: printf("OK_4_BIT"); break;
+    case STATUS_OK_5_BIT: printf("OK_5_BIT"); break;
+    case STATUS_OK_6_BIT: printf("OK_6_BIT"); break;
+    case STATUS_OK_7_BIT: printf("OK_7_BIT"); break;
+    case STATUS_DISCOVERY_ALREADY_STARTED: printf("DISCOVERY_ALREADY_STARTED"); break;
+    case STATUS_DISCOVERY_TARGET_ACTIVATION_FAILED: printf("DISCOVERY_TARGET_ACTIVATION_FAILED"); break;
+    case STATUS_DISCOVERY_TEAR_DOWN: printf("DISCOVERY_TEAR_DOWN"); break;
+    case STATUS_RF_FRAME_CORRUPTED: printf("RF_FRAME_CORRUPTED"); break;
+    case STATUS_RF_TRANSMISSION_EXCEPTION: printf("RF_TRANSMISSION_EXCEPTION"); break;
+    case STATUS_RF_PROTOCOL_EXCEPTION: printf("RF_PROTOCOL_EXCEPTION"); break;
+    case STATUS_RF_TIMEOUT_EXCEPTION: printf("RF_TIMEOUT_EXCEPTION"); break;
+    case STATUS_RF_UNEXPECTED_DATA: printf("RF_UNEXPECTED_DATA"); break;
+    case STATUS_NFCEE_INTERFACE_ACTIVATION_FAILED: printf("NFCEE_INTERFACE_ACTIVATION_FAILED"); break;
+    case STATUS_NFCEE_TRANSMISSION_ERROR: printf("NFCEE_TRANSMISSION_ERROR"); break;
+    case STATUS_NFCEE_PROTOCOL_ERROR: printf("NFCEE_PROTOCOL_ERROR"); break;
+    case STATUS_NFCEE_TIMEOUT_ERROR: printf("NFCEE_TIMEOUT_ERROR"); break;
+    default: printf("[unknown status 0x%02x]", status); break;
+    }
+}
+
+Nci::Nci(const struct i2c_dt_spec i2c, const struct gpio_dt_spec irq_gpio, uint8_t *read_buf)
+    : read_buf(read_buf), i2c(i2c), irq(irq_gpio) {}
 Nci::~Nci() {}
 
 struct nci_control_msg {
@@ -117,105 +213,6 @@ int Nci::nci_write_read(const uint8_t *cmd) {
         return ret;
 
     return 0;
-}
-
-void print_rf_technology(const uint8_t technology) {
-    switch (technology) {
-    case NFC_RF_TECHNOLOGY_A: printf("NFC-A"); break;
-    case NFC_RF_TECHNOLOGY_B: printf("NFC-B"); break;
-    case NFC_RF_TECHNOLOGY_F: printf("NFC-F"); break;
-    case NFC_RF_TECHNOLOGY_V: printf("NFC-V"); break;
-    default: printf("[unknown RF technology 0x%02x]", technology); break;
-    }
-}
-
-void print_technology_mode(const uint8_t technology_mode) {
-    switch (technology_mode) {
-    case NFC_A_PASSIVE_POLL_MODE: printf("NFC-A passive poll mode"); break;
-    case NFC_B_PASSIVE_POLL_MODE: printf("NFC-B passive poll mode"); break;
-    case NFC_F_PASSIVE_POLL_MODE: printf("NFC-F passive poll mode"); break;
-    case NFC_ACTIVE_POLL_MODE: printf("NFC active poll mode"); break;
-    case NFC_V_PASSIVE_POLL_MODE: printf("NFC-V passivle poll mode"); break;
-    case NFC_A_PASSIVE_LISTEN_MODE: printf("NFC-A passive listen mode"); break;
-    case NFC_B_PASSIVE_LISTEN_MODE: printf("NFC-B passive listen mode"); break;
-    case NFC_F_PASSIVE_LISTEN_MODE: printf("NFC-F passive listen mode"); break;
-    case NFC_ACTIVE_LISTEN_MODE: printf("NFC active listen mode"); break;
-    default: printf("[unknown NFC technology / mode 0x%02x]", technology_mode); break;
-    }
-}
-
-void print_bitrate(const uint8_t bitrate) {
-    switch (bitrate) {
-    case NFC_BIT_RATE_106: printf("106 kbit/s"); break;
-    case NFC_BIT_RATE_212: printf("212 kbit/s"); break;
-    case NFC_BIT_RATE_424: printf("424 kbit/s"); break;
-    case NFC_BIT_RATE_848: printf("848 kbit/s"); break;
-    case NFC_BIT_RATE_1695: printf("1695 kbit/s"); break;
-    case NFC_BIT_RATE_3390: printf("3390 kbit/s"); break;
-    case NFC_BIT_RATE_6780: printf("6780 kbit/s"); break;
-    case NFC_BIT_RATE_26: printf("26 kbit/s"); break;
-    default: printf("[unknown bitrate 0x%02x]", bitrate); break;
-    }
-}
-
-void print_rf_protocol(const uint8_t protocol) {
-    switch (protocol) {
-    case RF_PROTO_UNDETERMINED: printf("RF_PROTO_UNDETERMINED"); break;
-    case RF_PROTO_T1T_DEPRECATED: printf("T1T (deprecated)"); break;
-    case RF_PROTO_T2T: printf("T2T"); break;
-    case RF_PROTO_T3T: printf("T3T"); break;
-    case RF_PROTO_ISO_DEP: printf("ISO-DEP"); break;
-    case RF_PROTO_NFC_DEP: printf("NFC-DEP"); break;
-    case RF_PROTO_T5T: printf("T5T"); break;
-    case RF_PROTO_NDEF: printf("NDEF"); break;
-    case RF_PROTO_WLC: printf("WLC"); break;
-    default: printf("[unknown protocol 0x%02x]", protocol); break;
-    }
-}
-
-void print_rf_interface(const uint8_t intf) {
-    switch (intf) {
-    case RF_INTF_NFCEE_DIRECT: printf("NFCEE direct"); break;
-    case RF_INTF_FRAME: printf("Frame RF"); break;
-    case RF_INTF_ISO_DEP: printf("ISO-DEP"); break;
-    case RF_INTF_NFC_DEP: printf("NFC-DEP"); break;
-    case RF_INTF_NDEF: printf("NDEF"); break;
-    case RF_INTF_WLC_P_AUTONOMOUS: printf("WLC-P autonomous"); break;
-    default: printf("[unknown RF interface 0x%02x]", intf); break;
-    }
-}
-
-void print_status(const uint8_t status) {
-    switch (status) {
-    case STATUS_OK: printf("OK"); break;
-    case STATUS_REJECTED: printf("REJECTED"); break;
-    case STATUS_FAILED: printf("FAILED"); break;
-    case STATUS_NOT_INITIALIZED: printf("NOT_INITIALIZED"); break;
-    case STATUS_SYNTAX_ERROR: printf("SYNTAX_ERROR"); break;
-    case STATUS_SEMANTIC_ERROR: printf("SEMANTIC_ERROR"); break;
-    case STATUS_INVALID_PARAM: printf("INVALID_PARAM"); break;
-    case STATUS_MESSAGE_SIZE_EXCEEDED: printf("MESSAGE_SIZE_EXCEEDED"); break;
-    case STATUS_OK_1_BIT: printf("OK_1_BIT"); break;
-    case STATUS_OK_2_BIT: printf("OK_2_BIT"); break;
-    case STATUS_OK_3_BIT: printf("OK_3_BIT"); break;
-    case STATUS_OK_4_BIT: printf("OK_4_BIT"); break;
-    case STATUS_OK_5_BIT: printf("OK_5_BIT"); break;
-    case STATUS_OK_6_BIT: printf("OK_6_BIT"); break;
-    case STATUS_OK_7_BIT: printf("OK_7_BIT"); break;
-    case STATUS_DISCOVERY_ALREADY_STARTED: printf("DISCOVERY_ALREADY_STARTED"); break;
-    case STATUS_DISCOVERY_TARGET_ACTIVATION_FAILED: printf("DISCOVERY_TARGET_ACTIVATION_FAILED"); break;
-    case STATUS_DISCOVERY_TEAR_DOWN: printf("DISCOVERY_TEAR_DOWN"); break;
-    case STATUS_RF_FRAME_CORRUPTED: printf("RF_FRAME_CORRUPTED"); break;
-    case STATUS_RF_TRANSMISSION_EXCEPTION: printf("RF_TRANSMISSION_EXCEPTION"); break;
-    case STATUS_RF_PROTOCOL_EXCEPTION: printf("RF_PROTOCOL_EXCEPTION"); break;
-    case STATUS_RF_TIMEOUT_EXCEPTION: printf("RF_TIMEOUT_EXCEPTION"); break;
-    case STATUS_RF_UNEXPECTED_DATA: printf("RF_UNEXPECTED_DATA"); break;
-    case STATUS_NFCEE_INTERFACE_ACTIVATION_FAILED: printf("NFCEE_INTERFACE_ACTIVATION_FAILED"); break;
-    case STATUS_NFCEE_TRANSMISSION_ERROR: printf("NFCEE_TRANSMISSION_ERROR"); break;
-    case STATUS_NFCEE_PROTOCOL_ERROR: printf("NFCEE_PROTOCOL_ERROR"); break;
-    case STATUS_NFCEE_TIMEOUT_ERROR: printf("NFCEE_TIMEOUT_ERROR"); break;
-    default: printf("[unknown status 0x%02x]", status); break;
-    }
 }
 
 // NOTE This might become a full on handler function later.
@@ -581,6 +578,5 @@ void Nci::nci_debug(const uint8_t *msg_buf) {
             printf("[PBF] ");
         }
         printf("Data message (Conn ID: 0x%01x; %i credits)\n", msg.conn_id, msg.credits);
-        // TODO this feature would theoretically also take an extra arg for the protocol
     }
 }
