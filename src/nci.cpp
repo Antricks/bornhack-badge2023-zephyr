@@ -1,6 +1,4 @@
 #include <string.h>
-#include <zephyr/drivers/gpio.h>
-#include <zephyr/drivers/i2c.h>
 
 #include "config.h"
 #include "nci.h"
@@ -105,10 +103,6 @@ void print_status(const uint8_t status) {
     }
 }
 
-Nci::Nci(const struct i2c_dt_spec i2c, const struct gpio_dt_spec irq_gpio)
-    : i2c(i2c), irq(irq_gpio) {}
-Nci::~Nci() {}
-
 struct nci_control_msg {
     uint8_t message_type;
     bool pkg_boundary_flag;
@@ -132,6 +126,9 @@ struct nci_data_msg {
 size_t expected_packet_length(const uint8_t *packet) {
     return 3 + packet[2];
 }
+
+Nci::Nci() {}
+Nci::~Nci() {}
 
 struct nci_control_msg Nci::nci_parse_control_msg_standalone(const uint8_t *msg_buf) {
     uint8_t payload_len = msg_buf[2];
@@ -162,9 +159,9 @@ struct nci_data_msg Nci::nci_parse_data_msg_standalone(const uint8_t *msg_buf) {
 }
 
 int Nci::nci_write(const uint8_t *cmd) {
-    int ret = i2c_write_dt(&this->i2c, cmd, expected_packet_length(cmd));
+    int ret = transport_write(cmd, expected_packet_length(cmd));
     if (ret) {
-        printf("i2c_write_dt: %i\n", ret);
+        printf("transport_write: %i\n", ret);
         return ret;
     }
 #if DEBUG_NCI_HEXDUMP
@@ -179,10 +176,9 @@ int Nci::nci_write(const uint8_t *cmd) {
 }
 
 int Nci::nci_read() {
-    // TODO this currently enforces read_buf to be public which is not good...
-    int ret = i2c_read_dt(&this->i2c, this->read_buf, this->read_buf_len);
+    int ret = transport_read();
     if (ret) {
-        printf("i2c_read_dt: %i\n", ret);
+        printf("transport_read: %i\n", ret);
         return ret;
     }
 #if DEBUG_NCI_HEXDUMP
@@ -204,7 +200,7 @@ int Nci::nci_write_read(const uint8_t *cmd) {
         return ret;
     }
 
-    while (gpio_pin_get_dt(&this->irq) == 0) {
+    while (!transport_ready_to_read()) {
         k_sleep(K_MSEC(50));
     }
 

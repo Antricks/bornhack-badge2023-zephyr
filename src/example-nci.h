@@ -12,4 +12,10 @@ class ExampleNci : public Nci {
     int nfcc_setup();
 
   private:
+    const struct i2c_dt_spec i2c;
+    const struct gpio_dt_spec irq;
+
+    int transport_read();
+    int transport_write(const uint8_t *buf, size_t buf_len);
+    bool transport_ready_to_read();
 };

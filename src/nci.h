@@ -241,9 +241,8 @@ enum rf_state {
 
 class Nci {
   public:
-    // TODO Improve abstraction here to not need to pass I2C here. The transport protocol shouldn't matter.
-    Nci(const struct i2c_dt_spec i2c, const struct gpio_dt_spec irq_gpio);
-    ~Nci();
+    Nci();
+    virtual ~Nci();
 
     int nci_read();
     int nci_write(const uint8_t *cmd);
@@ -251,11 +250,15 @@ class Nci {
     void nci_debug(const uint8_t *msg_buf);
 
   protected:
+    // reads max. read_buf_len to read_buf
+    virtual int transport_read() = 0;
+    // writes buf to transport
+    virtual int transport_write(const uint8_t *buf, size_t buf_len) = 0;
+    // indicates readyness to read from transport
+    virtual bool transport_ready_to_read() = 0;
+
     uint8_t read_buf[255] = {0};
     size_t read_buf_len = 255;
-
-    const struct i2c_dt_spec i2c;
-    const struct gpio_dt_spec irq;
 
     struct nci_control_msg nci_parse_control_msg_standalone(const uint8_t *msg_buf);
     struct nci_data_msg nci_parse_data_msg_standalone(const uint8_t *msg_buf);

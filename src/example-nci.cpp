@@ -1,8 +1,24 @@
 #include <stdint.h>
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/drivers/i2c.h>
+
 #include "example-nci.h"
 
-ExampleNci::ExampleNci(const struct i2c_dt_spec i2c, const struct gpio_dt_spec irq_gpio) : Nci(i2c, irq_gpio) {}
+ExampleNci::ExampleNci(const struct i2c_dt_spec i2c, const struct gpio_dt_spec irq) : i2c(i2c), irq(irq) {}
 ExampleNci::~ExampleNci() {}
+
+int ExampleNci::transport_read() {
+    return i2c_read_dt(&this->i2c, &this->read_buf[0], this->read_buf_len);
+}
+
+// TODO fragment on output limit exceeded
+int ExampleNci::transport_write(const uint8_t *buf, size_t buf_len) {
+    return i2c_write_dt(&this->i2c, buf, buf_len);
+}
+
+bool ExampleNci::transport_ready_to_read() {
+    return gpio_pin_get_dt(&irq) != 0;
+}
 
 int ExampleNci::nfca_iso_dep_setup() {
     // RF_DISCOVER_MAP_CMD 4 bytes, 1 mapping, 0x04: PROTOCOL_ISO_DEP, 0b10: map RF interface in listen mode,
