@@ -1,5 +1,5 @@
 #pragma once
-#include "dep.h"
+#include "dep.hpp"
 
 // I feel like these defines are not really necessary for the most part but whatevs...
 #define APDU_INS_DEACTIVATE_FILE 0x04
