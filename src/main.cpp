@@ -279,9 +279,6 @@ int main(void) {
     bool dir = true;
     uint32_t pulse = pwm_min_pulse;
 
-    uint8_t test_data_msg[] = {0x13, 0x37, 0x37, 0xc3};
-    nci.nci_send_data_msg(test_data_msg, 4);
-
     while (true) {
         pwm_set_pulse_dt(&pwm_led_user0, pulse);
         pulse = dir ? pulse / 1.05 : pulse * 1.05;
