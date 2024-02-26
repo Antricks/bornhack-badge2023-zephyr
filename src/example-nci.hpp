@@ -1,6 +1,6 @@
 #pragma once
 
-#include "nci.h"
+#include "nci.hpp"
 
 class ExampleNci : public Nci {
   public:

@@ -1,8 +1,8 @@
 #include <string.h>
 
 #include "config.h"
-#include "nci.h"
-#include "util.h"
+#include "nci.hpp"
+#include "util.hpp"
 
 void print_rf_technology(const uint8_t technology) {
     switch (technology) {

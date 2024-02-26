@@ -1,5 +1,5 @@
 #pragma once
-#include "nci.h"
+#include "nci.hpp"
 
 class Dep {
   public:

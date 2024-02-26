@@ -2,7 +2,7 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/i2c.h>
 
-#include "example-nci.h"
+#include "example-nci.hpp"
 
 ExampleNci::ExampleNci(const struct i2c_dt_spec i2c, const struct gpio_dt_spec irq) : i2c(i2c), irq(irq) {}
 ExampleNci::~ExampleNci() {}

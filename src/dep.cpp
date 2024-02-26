@@ -1,4 +1,4 @@
-#include "nci.h"
-#include "dep.h"
+#include "nci.hpp"
+#include "dep.hpp"
 
 Dep::Dep(const Nci &nci) : nci(nci) {};

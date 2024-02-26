@@ -10,8 +10,8 @@
 #include <zephyr/usb/usb_device.h>
 
 #include "config.h"
-#include "example-nci.h"
-#include "util.h"
+#include "example-nci.hpp"
+#include "util.hpp"
 
 static const struct gpio_dt_spec btn_user1 = GPIO_DT_SPEC_GET(DT_NODELABEL(btn_user1), gpios);
 static const struct gpio_dt_spec btn_user2 = GPIO_DT_SPEC_GET(DT_NODELABEL(btn_user2), gpios);

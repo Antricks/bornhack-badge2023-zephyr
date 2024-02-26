@@ -1,6 +1,5 @@
-#include "iso-dep.h"
-#include "dep.h"
-#include "nci.h"
+#include "iso-dep.hpp"
+#include "dep.hpp"
 
-IsoDep::IsoDep(const Nci &nci) : Dep(&nci) {}
+IsoDep::IsoDep(const Nci &nci) : Dep(nci) {}
 IsoDep::~IsoDep() {}
