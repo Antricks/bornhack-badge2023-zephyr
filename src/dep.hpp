@@ -1,12 +1,16 @@
 #pragma once
+
 #include "nci.hpp"
 
+// Theoretically it could be nice to also abstract away transport here
+// but honestly I don't know if that's maybe a bit too much...
+class Nci;
 class Dep {
   public:
-    Dep(const Nci &nci);
+    Dep(Nci *nci);
     virtual ~Dep();
 
-    virtual int handle_package(const uint8_t *buf, size_t buf_len);
+    virtual int handle_apdu(const uint8_t *buf, size_t buf_len) = 0;
   protected:
-    const Nci &nci;
+    Nci *nci;
 };

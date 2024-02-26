@@ -4,6 +4,7 @@
 #include "config.h"
 #include "nci.hpp"
 #include "util.hpp"
+#include "iso-dep.hpp"
 
 void print_rf_technology(const uint8_t technology) {
     switch (technology) {
@@ -110,7 +111,7 @@ struct nci_control_msg {
     uint8_t gid;
     uint8_t oid;
     uint8_t payload_len;
-    uint8_t payload[256]; // TODO this is not really exactly nice but I don't know how else to do this...
+    uint8_t payload[256];
     struct nci_control_msg *next;
 };
 
@@ -119,7 +120,7 @@ struct nci_data_msg {
     uint8_t conn_id;
     uint8_t credits;
     uint8_t payload_len;
-    uint8_t payload[256]; // TODO this is not really exactly nice but I don't know how else to do this...
+    uint8_t payload[256];
     struct nci_data_msg *next;
 };
 
@@ -159,6 +160,7 @@ struct nci_data_msg Nci::nci_parse_data_msg_standalone(const uint8_t *msg_buf) {
     return msg;
 }
 
+// TODO implement fragmentation
 int Nci::nci_write(const uint8_t *cmd) {
     int ret = transport_write(cmd, expected_packet_length(cmd));
     if (ret) {
@@ -170,12 +172,12 @@ int Nci::nci_write(const uint8_t *cmd) {
     hexdump("> ", cmd, expected_packet_length(cmd));
     puts("");
 #endif
-#if DEBUG_NCI_ANALYSIS
-    nci_debug(cmd);
-#endif
+    // TODO / NOTE: is it necessary to handle sent commands?
+    // nci_handle(cmd);
     return 0;
 }
 
+// TODO implement defragmentation
 int Nci::nci_read() {
     int ret = transport_read();
     if (ret) {
@@ -187,9 +189,7 @@ int Nci::nci_read() {
     hexdump("< ", this->read_buf, expected_packet_length(this->read_buf));
     puts("");
 #endif
-#if DEBUG_NCI_ANALYSIS
-    nci_debug(this->read_buf);
-#endif
+    nci_handle(this->read_buf);
     return 0;
 }
 
@@ -212,7 +212,7 @@ int Nci::nci_write_read(const uint8_t *cmd) {
     return 0;
 }
 
-int Nci::nci_send_data_msg(uint8_t *msg_buf, size_t msg_len) {
+int Nci::nci_send_data_msg(const uint8_t *msg_buf, size_t msg_len) {
     uint8_t *nci_msg_buf = (uint8_t*) k_malloc(msg_len+3);
     nci_msg_buf[0] = 0x00;
     nci_msg_buf[1] = 0x00;
@@ -227,7 +227,7 @@ int Nci::nci_send_data_msg(uint8_t *msg_buf, size_t msg_len) {
 // Theoretically it should not need it but a flag to deactivate debug messages & actual handling
 // could be nice in the future.
 // This should also take a representation of current context (state machine, parameters, ...)
-void Nci::nci_debug(const uint8_t *msg_buf) {
+void Nci::nci_handle(const uint8_t *msg_buf) {
     uint8_t mt = msg_buf[0] & 0xe0; // this should also maybe be abstracted.
     if (mt == MT_CMD || mt == MT_RSP || mt == MT_NTF) {
         struct nci_control_msg msg = nci_parse_control_msg_standalone(msg_buf);
@@ -526,6 +526,7 @@ void Nci::nci_debug(const uint8_t *msg_buf) {
                                 printf("\n\t\t\tParam 4 (0x%02x): DID: 0x%01x", params[3], params[3] & 0x0f);
                                 printf("\n");
                             }
+                            this->dep = new IsoDep(this);
                         } else if (rf_intf == RF_INTF_NFC_DEP) {
                             if (rf_techno_mode == NFC_A_PASSIVE_POLL_MODE ||
                                 rf_techno_mode == NFC_F_PASSIVE_POLL_MODE || rf_techno_mode == NFC_ACTIVE_POLL_MODE) {
@@ -584,5 +585,9 @@ void Nci::nci_debug(const uint8_t *msg_buf) {
             printf("[PBF] ");
         }
         printf("Data message (Conn ID: 0x%01x; %i credits)\n", msg.conn_id, msg.credits);
+        // TODO this could be nicer...
+        if(this->dep) {
+            this->dep->handle_apdu(msg.payload, msg.payload_len);
+        }
     }
 }

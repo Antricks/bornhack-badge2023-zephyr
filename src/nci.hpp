@@ -2,6 +2,8 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/i2c.h>
 
+#include "dep.hpp"
+
 // [NCI Table 2] Message Types
 #define MT_DATA 0 << 5
 #define MT_CMD 1 << 5
@@ -239,6 +241,7 @@ enum rf_state {
     rfst_w4_host_select
 };
 
+class Dep;
 class Nci {
   public:
     Nci();
@@ -247,8 +250,8 @@ class Nci {
     int nci_read();
     int nci_write(const uint8_t *cmd);
     int nci_write_read(const uint8_t *cmd);
-    int nci_send_data_msg(uint8_t *msg_buf, size_t msg_len);
-    void nci_debug(const uint8_t *msg_buf);
+    int nci_send_data_msg(const uint8_t *msg_buf, size_t msg_len);
+    void nci_handle(const uint8_t *msg_buf);
 
   protected:
     // reads max. read_buf_len to read_buf
@@ -257,6 +260,8 @@ class Nci {
     virtual int transport_write(const uint8_t *buf, size_t buf_len) = 0;
     // indicates readyness to read from transport
     virtual bool transport_ready_to_read() = 0;
+
+    Dep *dep = 0;
 
     uint8_t read_buf[255] = {0};
     size_t read_buf_len = 255;

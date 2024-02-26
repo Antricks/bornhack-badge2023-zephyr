@@ -87,10 +87,10 @@
 
 // Theoretically it could be nice to also abstract away transport here
 // but honestly I don't know if that's maybe a bit too much...
-class IsoDep : Dep {
+class IsoDep : public Dep {
   public:
-    IsoDep(const Nci &nci);
-    virtual ~IsoDep();
+    IsoDep(Nci *nci);
+    ~IsoDep();
 
-    int handle_package(const uint8_t *buf, size_t buf_len);
+    int handle_apdu(const uint8_t *buf, size_t buf_len);
 };
