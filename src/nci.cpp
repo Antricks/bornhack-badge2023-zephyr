@@ -104,7 +104,7 @@ void print_status(const uint8_t status) {
 }
 
 struct nci_control_msg {
-    uint8_t message_type;
+    uint8_t mt;
     bool pkg_boundary_flag;
     uint8_t gid;
     uint8_t oid;

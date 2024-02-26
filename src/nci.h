@@ -229,14 +229,14 @@
 #define NFCEE_NTF MT_NTF | CMD_GID_NFCEE_MGMT
 
 enum rf_state {
-    idle,
-    discovery,
-    listen_active,
-    listen_sleep,
-    poll_removal_detection,
-    poll_active,
-    w4_all_discoveries,
-    w4_host_select
+    rfst_idle,
+    rfst_discovery,
+    rfst_listen_active,
+    rfst_listen_sleep,
+    rfst_poll_removal_detection,
+    rfst_poll_active,
+    rfst_w4_all_discoveries,
+    rfst_w4_host_select
 };
 
 class Nci {
@@ -263,6 +263,7 @@ class Nci {
     struct nci_control_msg nci_parse_control_msg_standalone(const uint8_t *msg_buf);
     struct nci_data_msg nci_parse_data_msg_standalone(const uint8_t *msg_buf);
 
+    void update_rf_state(const struct nci_control_msg &msg);
     rf_state state;
     uint8_t rf_intf;
     uint8_t rf_techno_mode;
