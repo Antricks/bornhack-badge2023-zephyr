@@ -1,4 +1,5 @@
 #pragma once
+#include "dep.h"
 
 // I feel like these defines are not really necessary for the most part but whatevs...
 #define APDU_INS_DEACTIVATE_FILE 0x04
@@ -84,14 +85,12 @@
 #define APDU_INS_REMOVE_APPLICATION_ed 0xed
 #define APDU_INS_TERMINATE_CARD_USAGE 0xfe
 
-class IsoDep {
+// Theoretically it could be nice to also abstract away transport here
+// but honestly I don't know if that's maybe a bit too much...
+class IsoDep : Dep {
   public:
-    IsoDep();
-    IsoDep(IsoDep &&) = default;
-    IsoDep(const IsoDep &) = default;
-    IsoDep &operator=(IsoDep &&) = default;
-    IsoDep &operator=(const IsoDep &) = default;
-    ~IsoDep();
+    IsoDep(const Nci &nci);
+    virtual ~IsoDep();
 
-  private:
+    int handle_package(const uint8_t *buf, size_t buf_len);
 };
