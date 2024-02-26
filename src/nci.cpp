@@ -1,4 +1,5 @@
 #include <string.h>
+#include <zephyr/kernel.h>
 
 #include "config.h"
 #include "nci.hpp"
@@ -209,6 +210,17 @@ int Nci::nci_write_read(const uint8_t *cmd) {
         return ret;
 
     return 0;
+}
+
+int Nci::nci_send_data_msg(uint8_t *msg_buf, size_t msg_len) {
+    uint8_t *nci_msg_buf = (uint8_t*) k_malloc(msg_len+3);
+    nci_msg_buf[0] = 0x00;
+    nci_msg_buf[1] = 0x00;
+    nci_msg_buf[2] = msg_len;
+    memcpy(&nci_msg_buf[3], msg_buf, msg_len);
+    int ret = nci_write(nci_msg_buf);
+    k_free(nci_msg_buf);
+    return ret;
 }
 
 // NOTE This might become a full on handler function later.

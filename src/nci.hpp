@@ -247,6 +247,7 @@ class Nci {
     int nci_read();
     int nci_write(const uint8_t *cmd);
     int nci_write_read(const uint8_t *cmd);
+    int nci_send_data_msg(uint8_t *msg_buf, size_t msg_len);
     void nci_debug(const uint8_t *msg_buf);
 
   protected:
