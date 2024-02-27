@@ -174,6 +174,7 @@ int Nci::nci_write(const uint8_t *cmd) {
 #endif
     // TODO / NOTE: is it necessary to handle sent commands?
     // nci_handle(cmd, false);
+    puts("");
     return 0;
 }
 
@@ -190,6 +191,7 @@ int Nci::nci_read() {
     puts("");
 #endif
     nci_handle(this->read_buf, true);
+    puts("");
     return 0;
 }
 
@@ -381,8 +383,13 @@ void Nci::nci_handle(const uint8_t *msg_buf, bool incoming) {
             switch (msg.gid) {
             case CMD_GID_CORE:
                 switch (msg.oid) {
-                case CORE_RESET: printf("CORE_RESET_NTF\n"); break;                 // TODO details
-                case CORE_CONN_CREDITS: printf("CORE_CONN_CREDITS_NTF\n"); break;   // TODO details
+                case CORE_RESET: printf("CORE_RESET_NTF\n"); break; // TODO details
+                case CORE_CONN_CREDITS: {
+                    printf("CORE_CONN_CREDITS_NTF (%i entries)\n", msg.payload[0]);
+                    for (int i = 0; i < msg.payload[0]; i++) {
+                        printf("\tConnection %i: %i credits\n", msg.payload[1 + i * 2], msg.payload[2 + i * 2]);
+                    }
+                } break;
                 case CORE_GENERIC_ERROR: printf("CORE_GENERIC_ERROR_NTF\n"); break; // TODO details
                 case CORE_INTERFACE_ERROR:
                     printf("CORE_INTERFACE_ERROR_NTF (");
