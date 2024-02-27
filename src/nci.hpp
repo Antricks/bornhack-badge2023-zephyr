@@ -251,7 +251,7 @@ class Nci {
     int nci_write(const uint8_t *cmd);
     int nci_write_read(const uint8_t *cmd);
     int nci_send_data_msg(const uint8_t *msg_buf, size_t msg_len);
-    void nci_handle(const uint8_t *msg_buf);
+    void nci_handle(const uint8_t *msg_buf, bool incoming);
 
   protected:
     // reads max. read_buf_len to read_buf
@@ -266,8 +266,8 @@ class Nci {
     uint8_t read_buf[255] = {0};
     size_t read_buf_len = 255;
 
-    struct nci_control_msg nci_parse_control_msg_standalone(const uint8_t *msg_buf);
-    struct nci_data_msg nci_parse_data_msg_standalone(const uint8_t *msg_buf);
+    struct nci_control_msg nci_parse_control_msg_standalone(const uint8_t *msg_buf) const;
+    struct nci_data_msg nci_parse_data_msg_standalone(const uint8_t *msg_buf) const;
 
     void update_rf_state(const struct nci_control_msg &msg);
     rf_state state;

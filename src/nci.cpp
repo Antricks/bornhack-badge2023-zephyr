@@ -2,9 +2,9 @@
 #include <zephyr/kernel.h>
 
 #include "config.h"
+#include "iso-dep.hpp"
 #include "nci.hpp"
 #include "util.hpp"
-#include "iso-dep.hpp"
 
 void print_rf_technology(const uint8_t technology) {
     switch (technology) {
@@ -132,7 +132,7 @@ size_t expected_packet_length(const uint8_t *packet) {
 Nci::Nci() {}
 Nci::~Nci() {}
 
-struct nci_control_msg Nci::nci_parse_control_msg_standalone(const uint8_t *msg_buf) {
+struct nci_control_msg Nci::nci_parse_control_msg_standalone(const uint8_t *msg_buf) const {
     uint8_t payload_len = msg_buf[2];
     struct nci_control_msg msg = (struct nci_control_msg){
         .pkg_boundary_flag = (msg_buf[0] & 0x10) != 0,
@@ -146,7 +146,7 @@ struct nci_control_msg Nci::nci_parse_control_msg_standalone(const uint8_t *msg_
     return msg;
 }
 
-struct nci_data_msg Nci::nci_parse_data_msg_standalone(const uint8_t *msg_buf) {
+struct nci_data_msg Nci::nci_parse_data_msg_standalone(const uint8_t *msg_buf) const {
     uint8_t payload_len = msg_buf[2];
     struct nci_data_msg msg = (struct nci_data_msg){
         .pkg_boundary_flag = (msg_buf[0] & 0x10) != 0,
@@ -173,7 +173,7 @@ int Nci::nci_write(const uint8_t *cmd) {
     puts("");
 #endif
     // TODO / NOTE: is it necessary to handle sent commands?
-    // nci_handle(cmd);
+    // nci_handle(cmd, false);
     return 0;
 }
 
@@ -189,7 +189,7 @@ int Nci::nci_read() {
     hexdump("< ", this->read_buf, expected_packet_length(this->read_buf));
     puts("");
 #endif
-    nci_handle(this->read_buf);
+    nci_handle(this->read_buf, true);
     return 0;
 }
 
@@ -213,7 +213,7 @@ int Nci::nci_write_read(const uint8_t *cmd) {
 }
 
 int Nci::nci_send_data_msg(const uint8_t *msg_buf, size_t msg_len) {
-    uint8_t *nci_msg_buf = (uint8_t*) k_malloc(msg_len+3);
+    uint8_t *nci_msg_buf = (uint8_t *)k_malloc(msg_len + 3);
     nci_msg_buf[0] = 0x00;
     nci_msg_buf[1] = 0x00;
     nci_msg_buf[2] = msg_len;
@@ -223,11 +223,7 @@ int Nci::nci_send_data_msg(const uint8_t *msg_buf, size_t msg_len) {
     return ret;
 }
 
-// NOTE This might become a full on handler function later.
-// Theoretically it should not need it but a flag to deactivate debug messages & actual handling
-// could be nice in the future.
-// This should also take a representation of current context (state machine, parameters, ...)
-void Nci::nci_handle(const uint8_t *msg_buf) {
+void Nci::nci_handle(const uint8_t *msg_buf, bool incoming) {
     uint8_t mt = msg_buf[0] & 0xe0; // this should also maybe be abstracted.
     if (mt == MT_CMD || mt == MT_RSP || mt == MT_NTF) {
         struct nci_control_msg msg = nci_parse_control_msg_standalone(msg_buf);
@@ -585,9 +581,12 @@ void Nci::nci_handle(const uint8_t *msg_buf) {
             printf("[PBF] ");
         }
         printf("Data message (Conn ID: 0x%01x; %i credits)\n", msg.conn_id, msg.credits);
-        // TODO this could be nicer...
-        if(this->dep) {
-            this->dep->handle_apdu(msg.payload, msg.payload_len);
+        if (incoming) {
+            if (this->dep) {
+                this->dep->handle_apdu(msg.payload, msg.payload_len);
+            } else {
+                puts("No valid DEP instance available.");
+            }
         }
     }
 }

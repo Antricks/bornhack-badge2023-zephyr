@@ -10,7 +10,7 @@ class Dep {
     Dep(Nci *nci);
     virtual ~Dep();
 
-    virtual int handle_apdu(const uint8_t *buf, size_t buf_len) = 0;
+    virtual int handle_apdu(const uint8_t *buf, size_t buf_len) const = 0;
   protected:
     Nci *nci;
 };

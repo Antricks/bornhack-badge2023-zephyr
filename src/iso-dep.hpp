@@ -92,5 +92,5 @@ class IsoDep : public Dep {
     IsoDep(Nci *nci);
     ~IsoDep();
 
-    int handle_apdu(const uint8_t *buf, size_t buf_len);
+    int handle_apdu(const uint8_t *buf, size_t buf_len) const;
 };
