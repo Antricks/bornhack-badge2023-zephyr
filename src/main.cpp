@@ -281,12 +281,12 @@ int main(void) {
 
     while (true) {
         pwm_set_pulse_dt(&pwm_led_user0, pulse);
-        pulse = dir ? pulse / 1.05 : pulse * 1.05;
+        pulse = dir ? pulse / 1.02 : pulse * 1.02;
         if ((dir && pulse < pwm_min_pulse) || (!dir && pulse > pwm_max_pulse)) {
             dir = !dir;
         }
 
-        k_msleep(30);
+        k_msleep(10);
 
         if (gpio_pin_get_dt(&nfcc_irq)) {
             nci.nci_read();

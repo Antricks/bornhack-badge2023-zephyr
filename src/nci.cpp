@@ -389,7 +389,7 @@ void Nci::nci_handle(const uint8_t *msg_buf, bool incoming) {
                     for (int i = 0; i < msg.payload[0]; i++) {
                         printf("\tConnection %i: %i credits\n", msg.payload[1 + i * 2], msg.payload[2 + i * 2]);
                     }
-                } break;
+                } break; // TODO store credits -> TODO implement connections
                 case CORE_GENERIC_ERROR: printf("CORE_GENERIC_ERROR_NTF\n"); break; // TODO details
                 case CORE_INTERFACE_ERROR:
                     printf("CORE_INTERFACE_ERROR_NTF (");
@@ -407,7 +407,7 @@ void Nci::nci_handle(const uint8_t *msg_buf, bool incoming) {
                     printf("RF_INTF_ACTIVATED_NTF\n");
                     printf("\tRF Discovery ID: %02x\n", msg.payload[0]);
                     printf("\tRF Interface: ");
-                    uint8_t rf_intf = msg.payload[1];
+                    this->rf_intf = msg.payload[1];
                     print_rf_interface(rf_intf);
                     printf("\n");
                     printf("\tRF Protocol: ");
@@ -428,7 +428,7 @@ void Nci::nci_handle(const uint8_t *msg_buf, bool incoming) {
                         printf("\tNo technology specific params.\n");
                     }
                     printf("\tData Exchange RF Technology and Mode: ");
-                    uint8_t rf_techno_mode = msg.payload[7 + techno_params_len];
+                    this->rf_techno_mode = msg.payload[7 + techno_params_len];
                     print_technology_mode(rf_techno_mode);
                     printf("\n");
                     printf("\tData Exchange Transmit Rate: ");

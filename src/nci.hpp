@@ -275,7 +275,6 @@ class Nci {
     uint8_t rf_techno_mode;
     uint8_t discovery_id;
     uint8_t max_data_payload_size;
-    uint8_t credits;
 };
 
 // returns the expected overall length of an NCI packet according to packet header
