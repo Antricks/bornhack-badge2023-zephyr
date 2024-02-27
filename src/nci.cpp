@@ -549,7 +549,29 @@ void Nci::nci_handle(const uint8_t *msg_buf, bool incoming) {
                         printf("\tNo activation parameters.");
                     }
                 } break;
-                case RF_DEACTIVATE: printf("RF_DEACTIVATE_NTF\n"); break;
+                case RF_DEACTIVATE:
+                    printf("RF_DEACTIVATE_NTF - type: ");
+                    switch (msg.payload[0]) {
+                    case 0: printf("Idle Mode "); break;
+                    case 1: printf("Sleep Mode "); break;
+                    case 2: printf("Sleep AF Mode "); break;
+                    case 3: printf("Discovery "); break;
+                    default: printf("[unknown]"); break;
+                    }
+                    printf("| reason: ");
+                    switch (msg.payload[1]) {
+                    case 0: printf("DH Request\n"); break; 
+                    case 1: printf("Endpoint Request\n"); break; 
+                    case 2: printf("RF Link Loss\n"); break; 
+                    case 3: printf("NFC Bad AFI\n"); break; 
+                    case 4: printf("DH request failed due to error\n"); break; 
+                    case 5: printf("RF_REMOTE_ENDPOINT_REMOVED\n"); break; 
+                    case 6: printf("RF_TIMEOUT_EXCEPTION\n"); break; 
+                    case 7: printf("RF_PROTOCOL_EXCEPTION\n"); break; 
+                    case 8: printf("RF_FO_DETECTED\n"); break; 
+                    default: printf("[unknown]\n"); break;
+                    }
+                    break;
                 case RF_FIELD_INFO:
                     printf("RF_FIELD_INFO_NTF ");
                     if (msg.payload[0] & 0x01) {
@@ -588,6 +610,8 @@ void Nci::nci_handle(const uint8_t *msg_buf, bool incoming) {
             printf("[PBF] ");
         }
         printf("Data message (Conn ID: 0x%01x; %i credits)\n", msg.conn_id, msg.credits);
+        // TODO around here a crash occurs when handling a self sent data message.
+        // Probably some weird memory corruption in nci or iso-dep again...
         if (incoming) {
             if (this->dep) {
                 this->dep->handle_apdu(msg.payload, msg.payload_len);

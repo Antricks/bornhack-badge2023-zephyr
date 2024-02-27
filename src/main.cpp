@@ -46,7 +46,7 @@ int serial_init() {
 
     uart_line_ctrl_get(usb_device, UART_LINE_CTRL_DTR, &dtr);
 #if WAIT_FOR_SERIAL
-    // TODO for some reason main does not print to stdout after some time if I don't do this. No clue why... ._.
+    // TODO for some reason, if I don't do this, during execution, stdout stops working and then, after a short moment, starts to work again, dropping some messages. No clue why... ._.
     while (!dtr) {
         uart_line_ctrl_get(usb_device, UART_LINE_CTRL_DTR, &dtr);
         k_msleep(100);
