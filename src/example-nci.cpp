@@ -3,6 +3,7 @@
 #include <zephyr/drivers/i2c.h>
 
 #include "example-nci.hpp"
+#include "nci.hpp"
 
 ExampleNci::ExampleNci(const struct i2c_dt_spec i2c, const struct gpio_dt_spec irq) : i2c(i2c), irq(irq) {}
 ExampleNci::~ExampleNci() {}
@@ -29,31 +30,46 @@ int ExampleNci::nfca_iso_dep_setup() {
     nci_write_read(rf_discover_map_cmd);
     //TODO handle response
 
-    uint8_t nfca_core_config[] = {
-        CORE_CMD, CORE_SET_CONFIG, 0, // NOTICE: packet length is set dynamically!
-        6,                            // number of config entries
-        //CFG_LA_BIT_FRAME_SDD,1,0x00, // LA_BIT_FRAME_SDD - 4 Byte ID1, 00000b 
-        CFG_LA_PLATFORM_CONFIG,1,0x0c, // LA_PLATFORM_CONFIG - RFU part set to 0, rest set to 1100b 
-        CFG_LA_SEL_INFO,1,0x60, // LA_SEL_INFO = ??
-        //CFG_LA_NFCID1,7,0xcc,0xca,0xc,0x13,0x37,0x37,0xc3, // LA_NFCID1 = 0x37c31337
-        CFG_LA_NFCID1,7,0x04,0x7f,0x23,0xda,0x2d,0x6e,0x80,
-        //0x59,0x01,0x00, //# LI_A_HIST_BY = 0
-        //0x5b,0x01,0x01, //# LI_A_BIT_RATE = maximum available bitrate 
-        CFG_LI_A_RATS_TC1,1,0x02,
-        CFG_RF_FIELD_INFO,1,0x01,
-        CFG_RF_NFCEE_ACTION,1,0x01,
+    uint8_t nfca_core_config[]={
+        CORE_CMD, CORE_SET_CONFIG, 0, // NOTE: packet length is set dynamically!
+        8,
+        CFG_LA_BIT_FRAME_SDD , 0x01, 0x08,
+        CFG_LA_PLATFORM_CONFIG, 0x01, 0x03,
+        CFG_LA_SEL_INFO, 0x01, 0x60,
+        //CFG_LB_SENSB_INFO, 0x01, 0x01,
+        CFG_LA_NFCID1, 0x04, 0xc3, 0xac, 0x37, 0xc3,
+        CFG_LI_A_BIT_RATE, 0x01, 0x00,
+        CFG_LI_A_HIST_BY, 0x00,
+        CFG_RF_FIELD_INFO, 0x01, 0x00,
+        CFG_RF_NFCEE_ACTION , 0x01, 0x01,
     };
     nfca_core_config[2] = sizeof(nfca_core_config) - 3;
     nci_write_read(nfca_core_config);
-    // TODO handle response
+    
+    // uint8_t nfca_core_config[] = {
+    //     CORE_CMD, CORE_SET_CONFIG, 0, // NOTE: packet length is set dynamically!
+    //     7,                            // number of config entries
+    //     //CFG_LA_BIT_FRAME_SDD,1,0x00, // LA_BIT_FRAME_SDD - 4 Byte ID1, 00000b 
+    //     CFG_LA_PLATFORM_CONFIG,1,0x0c, // LA_PLATFORM_CONFIG - RFU part set to 0, rest set to 1100b 
+    //     CFG_LA_SEL_INFO,1,0x60, // LA_SEL_INFO = ??
+    //     //CFG_LA_NFCID1,7,0xc3,0xac,0x0,0x13,0x37,0x37,0xc3, // LA_NFCID1 = 0x37c31337
+    //     CFG_LA_NFCID1,4,0x08,0x13,0x37,0xc3,
+    //     CFG_LI_A_HIST_BY,0x01,0x00, //# LI_A_HIST_BY = 0
+    //     //0x5b,0x01,0x01, //# LI_A_BIT_RATE = maximum available bitrate 
+    //     CFG_LI_A_RATS_TC1,1,0x02,
+    //     CFG_RF_FIELD_INFO,1,0x01,
+    //     CFG_RF_NFCEE_ACTION,1,0x01,
+    // };
+    // nfca_core_config[2] = sizeof(nfca_core_config) - 3;
+    // nci_write_read(nfca_core_config);
+    // // TODO handle response
 
     uint8_t nfca_routing_table[] = {
-        RF_CMD, RF_SET_LISTEN_MODE_ROUTING, 0, 0x00, // NOTICE: packet length is set dynamically!
+        RF_CMD, RF_SET_LISTEN_MODE_ROUTING, 0, 0x00, // NOTE: packet length is set dynamically!
         1,
-        //0x02,0x07,0x00,0x3f,0x04,0x37,0xc3,0x13,0x37, // Application ID: 0x37c31337
-        //0x02,0x0a,0x00,0x3f,0x07,0xd2,0x76,0x00,0x00,0x85,0x01,0x01, // Route: DH, Power state: all on (NOTICE not sure if that's sensible), AID: 0xD2760000850101 (which stands for mapping version 2.0 NDEF Tag application)
+        //0x02,0x0a,0x00,0x3f,0x07,0xd2,0x76,0x00,0x00,0x85,0x01,0x01, // Route: DH, Power state: all on (NOTE not sure if that's sensible), AID: 0xD2760000850101 (which stands for mapping version 2.0 NDEF Tag application)
         0x01,3,0x00,0x3f, RF_PROTO_ISO_DEP, // Proto: ISO-DEP -> DH
-        //0x00,3,0x00,0x3f, NFC_RF_TECHNOLOGY_A, // Techno: NFC-A -> DH 
+        //0x40,3,0x00,0x3f, NFC_RF_TECHNOLOGY_A, // Techno: NFC-A -> DH 
     };
     nfca_routing_table[2] = sizeof(nfca_routing_table) - 3;
     nci_write_read(nfca_routing_table);
@@ -73,7 +89,7 @@ int ExampleNci::nfca_nfc_dep_setup() {
     //TODO handle response
 
     uint8_t nfca_core_config[] = {
-        CORE_CMD, CORE_SET_CONFIG, 0, // NOTICE: packet length is set dynamically!
+        CORE_CMD, CORE_SET_CONFIG, 0, // NOTE: packet length is set dynamically!
         9,                            // number of config entries
         CFG_LA_BIT_FRAME_SDD,1,0x00, // LA_BIT_FRAME_SDD - 4 Byte ID1, 00000b 
         CFG_LA_PLATFORM_CONFIG,1,0x0c, // LA_PLATFORM_CONFIG - RFU part set to 0, rest set to 1100b 
@@ -90,10 +106,10 @@ int ExampleNci::nfca_nfc_dep_setup() {
     // TODO handle response
 
     uint8_t nfca_routing_table[] = {
-        RF_CMD, RF_SET_LISTEN_MODE_ROUTING, 0, 0x00, // NOTICE: packet length is set dynamically!
+        RF_CMD, RF_SET_LISTEN_MODE_ROUTING, 0, 0x00, // NOTE: packet length is set dynamically!
         3,
         //0x02,0x07,0x00,0x3f,0x04,0x37,0xc3,0x13,0x37, // Application ID: 0x37c31337
-        0x02,0x0a,0x00,0x3f,0x07,0xd2,0x76,0x00,0x00,0x85,0x01,0x01, // Route: DH, Power state: all on (NOTICE not sure if that's sensible), AID: 0xD2760000850101 (which stands for mapping version 2.0 NDEF Tag application)
+        0x02,0x0a,0x00,0x3f,0x07,0xd2,0x76,0x00,0x00,0x85,0x01,0x01, // Route: DH, Power state: all on (NOTE not sure if that's sensible), AID: 0xD2760000850101 (which stands for mapping version 2.0 NDEF Tag application)
         0x01,0x03,0x00,0x3f,RF_PROTO_NFC_DEP, //
         0x00,0x03,0x00,0x3f,NFC_RF_TECHNOLOGY_A, // Techno: NFC-A 
     };
@@ -118,7 +134,7 @@ int ExampleNci::nfcb_iso_dep_setup() {
     // TODO handle response
 
     uint8_t nfcb_core_config[] = {
-        CORE_CMD, CORE_SET_CONFIG, 0, // NOTICE: packet length is set dynamically!
+        CORE_CMD, CORE_SET_CONFIG, 0, // NOTE: packet length is set dynamically!
         2,                            // number of config entries
         // CFG_LB_SENS_INFO, 0x01, 0x00,                   // LB_SENSB_INFO - no support for both
         CFG_LB_NFCID0, 4, 0x13, 0x37, 0x70, 0x07, // LB_NFCID0
@@ -134,11 +150,11 @@ int ExampleNci::nfcb_iso_dep_setup() {
     // TODO handle response
 
     uint8_t nfcb_routing_table[] = {
-        RF_CMD, RF_SET_LISTEN_MODE_ROUTING, 0, // NOTICE: packet length is set dynamically!
+        RF_CMD, RF_SET_LISTEN_MODE_ROUTING, 0, // NOTE: packet length is set dynamically!
         0x00,
         1, // number of table entries
         //0x02, 9, 0x00, 0x3f, 0xd2, 0x76, 0x00, 0x00, 0x85, 0x01, 0x01,
-        // Route: DH, Power state: all on (NOTICE not sure if that's sensible),
+        // Route: DH, Power state: all on (NOTE not sure if that's sensible),
         // AID: 0xD2760000850101 (which stands for mapping version 2.0 NDEF Tag application)
         0x01, 3, 0x00, 0x3f, 0x04 // Proto: ISO-DEP
     };

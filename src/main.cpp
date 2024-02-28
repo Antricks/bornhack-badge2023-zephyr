@@ -270,8 +270,8 @@ int main(void) {
     nci.nfcc_setup();
 
     // nci.nfca_nfc_dep_setup();
-    // nci.nfca_iso_dep_setup();
-    nci.nfcb_iso_dep_setup();
+    nci.nfca_iso_dep_setup();
+    // nci.nfcb_iso_dep_setup();
 
     // TODO adjust dynamically based on period from dt
     uint32_t pwm_min_pulse = PWM_NSEC(5000);
