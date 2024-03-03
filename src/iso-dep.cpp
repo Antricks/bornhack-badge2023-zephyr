@@ -60,7 +60,9 @@ int IsoDep::handle_apdu(const uint8_t *buf, size_t buf_len) {
                     uint8_t res[4] = {0x00, 0x20, 0x90, 0x00};
                     this->nci->nci_send_data_msg(res, 4);
                 } else {
-                    uint8_t res[34] = "\xd1\x00\x1d               Hello World :3\x90";
+                    uint8_t res[34] = "\xd1\x01\x1c"
+                                      "U\x04"
+                                      "youtu.be/dQw4w9WgXcQ#      \x90";
                     this->nci->nci_send_data_msg(res, 34);
                 }
             }
@@ -75,7 +77,11 @@ int IsoDep::handle_apdu(const uint8_t *buf, size_t buf_len) {
             const uint8_t res[2] = {0x90, 0};
             this->nci->nci_send_data_msg(res, 2);
         } break; // TODO implement as specified 3.0 ((:
-        default: printf("Unsupported INS 0x%02x for CLA=0x%02x\n", ins, cla); break;
+        default:
+            printf("Unsupported INS 0x%02x for CLA=0x%02x\n", ins, cla);
+            uint8_t res[2] = {0x6d, 0};
+            this->nci->nci_send_data_msg(res, 2);
+            break;
         }
         break;
     case 0x90:
@@ -85,21 +91,18 @@ int IsoDep::handle_apdu(const uint8_t *buf, size_t buf_len) {
             uint8_t res[9] = {1, 2, 3, 4, 5, 6, 7, 0x90, 0};
             this->nci->nci_send_data_msg(res, 9);
         } break;
-        default: printf("Unsupported INS 0x%02x for CLA=0x%02x\n", ins, cla); break;
+        default:
+            printf("Unsupported INS 0x%02x for CLA=0x%02x\n", ins, cla);
+            uint8_t res[2] = {0x6d, 0};
+            this->nci->nci_send_data_msg(res, 2);
+            break;
         }
         break;
-    case 0xff:
-        switch (ins) {
-        case 0xca: {
-            puts("Other (Matekasse) ID thingy idk man...");
-            uint8_t res[14] = {0x3b, 0x89, 0x80, 0x01, 0x4d, 0x54, 0x43,
-                               0x4f, 0x53, 0x73, 0x02, 0x02, 0x04, 0x39}; // Semesterticket :3
-            this->nci->nci_send_data_msg(res, 14);
-        } break;
-        default: printf("Unsupported INS 0x%02x for CLA=0x%02x\n", ins, cla); break;
-        }
+    default:
+        printf("Unknown CLA=0x%02x", cla);
+        uint8_t res[2] = {0x6e, 0};
+        this->nci->nci_send_data_msg(res, 2);
         break;
-    default: printf("Unknown CLA=0x%02x", cla);
     }
     return 0;
 }

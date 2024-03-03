@@ -160,25 +160,57 @@ struct nci_data_msg Nci::nci_parse_data_msg_standalone(const uint8_t *msg_buf) c
     return msg;
 }
 
-// TODO implement fragmentation
-int Nci::nci_write(const uint8_t *cmd) {
-    int ret = transport_write(cmd, expected_packet_length(cmd));
-    if (ret) {
-        printf("transport_write: %i\n", ret);
-        return ret;
-    }
+int Nci::nci_write(const uint8_t *msg) {
+    size_t pkg_len = expected_packet_length(msg);
+    uint8_t mt = msg[0] & 0xe0; // this should also maybe be abstracted.
+    int ret = -1;
+    bool is_data = mt == MT_DATA;
+
+    if ((is_data && pkg_len - 3 <= this->max_data_payload_size) || pkg_len - 3 <= this->max_ctrl_payload_size) {
+        ret = transport_write(msg, pkg_len);
+        if (ret) {
+            printf("transport_write: %i\n", ret);
+            return ret;
+        }
 #if DEBUG_NCI_HEXDUMP
-    // hexdump("> ", cmd, expected_packet_length(cmd));
-    hexdump("> ", cmd, expected_packet_length(cmd));
-    puts("");
+        hexdump("> ", msg, expected_packet_length(msg));
+        puts("");
 #endif
+    } else {
+        size_t step_size = is_data ? this->max_data_payload_size : this->max_ctrl_payload_size;
+
+        uint8_t *segment_buf = (uint8_t *)k_malloc(step_size + 3);
+        segment_buf[0] = msg[0] | 0x10; // header_0 of msg + pbf set
+        segment_buf[1] = msg[1];
+        segment_buf[2] = step_size;
+
+        for (size_t i = 0; i < pkg_len - 3; i += step_size) {
+            if (i + step_size < pkg_len) {
+                memcpy(&segment_buf[3], &msg[3 + i], step_size);
+            } else {
+                segment_buf[0] &= 0xef; // unset pbf
+                segment_buf[2] = pkg_len - 3 - i;
+                memcpy(&segment_buf[3], &msg[3 + i], segment_buf[2]);
+            }
+            ret = transport_write(&segment_buf[0], segment_buf[2] + 3);
+            if (ret) {
+                printf("transport_write: %i\n", ret);
+                return ret;
+            }
+#if DEBUG_NCI_HEXDUMP
+            hexdump("> ", &segment_buf[0], segment_buf[2] + 3);
+            puts("");
+#endif
+        }
+        k_free(segment_buf);
+    }
     // TODO / NOTE: is it necessary to handle sent commands?
     // nci_handle(cmd, false);
     puts("");
     return 0;
 }
 
-// TODO implement defragmentation
+// TODO implement reassembly
 int Nci::nci_read() {
     int ret = transport_read();
     if (ret) {
@@ -218,7 +250,7 @@ int Nci::nci_send_data_msg(const uint8_t *msg_buf, size_t msg_len) {
     uint8_t *nci_msg_buf = (uint8_t *)k_malloc(msg_len + 3);
     nci_msg_buf[0] = 0x00;
     nci_msg_buf[1] = 0x00;
-    nci_msg_buf[2] = msg_len;
+    nci_msg_buf[2] = (uint8_t)msg_len;
     memcpy(&nci_msg_buf[3], msg_buf, msg_len);
     int ret = nci_write(nci_msg_buf);
     k_free(nci_msg_buf);
@@ -230,7 +262,9 @@ void Nci::nci_handle(const uint8_t *msg_buf, bool incoming) {
     if (mt == MT_CMD || mt == MT_RSP || mt == MT_NTF) {
         struct nci_control_msg msg = nci_parse_control_msg_standalone(msg_buf);
         if (msg.pkg_boundary_flag) {
-            printf("[PBF] ");
+            printf("PBF not supported in nci_handle. Please reasseble first.");
+            k_oops();
+            return;
         }
         if (mt == MT_CMD) {
             // control message
@@ -300,7 +334,11 @@ void Nci::nci_handle(const uint8_t *msg_buf, bool incoming) {
                     printf("\n");
                     printf("\tMax Logical Connections: %i\n", msg.payload[5]);
                     printf("\tMax Routing Table Size: %i\n", *((uint16_t *)(&msg.payload[6])));
+                    // TODO using default value instead
+                    // this->max_ctrl_payload_size = msg.payload[8];
                     printf("\tMax Control Packet Payload Size: %i\n", msg.payload[8]);
+                    // TODO using default value instead
+                    // this->max_data_payload_size = msg.payload[9];
                     printf("\tMax Data Packet Payload Size: %i\n", msg.payload[9]);
                     printf("\tHCI Credits: %i\n", msg.payload[10]);
                     // NOTE values bigger than one octet are encoded in little endian.
@@ -560,15 +598,15 @@ void Nci::nci_handle(const uint8_t *msg_buf, bool incoming) {
                     }
                     printf("| reason: ");
                     switch (msg.payload[1]) {
-                    case 0: printf("DH Request\n"); break; 
-                    case 1: printf("Endpoint Request\n"); break; 
-                    case 2: printf("RF Link Loss\n"); break; 
-                    case 3: printf("NFC Bad AFI\n"); break; 
-                    case 4: printf("DH request failed due to error\n"); break; 
-                    case 5: printf("RF_REMOTE_ENDPOINT_REMOVED\n"); break; 
-                    case 6: printf("RF_TIMEOUT_EXCEPTION\n"); break; 
-                    case 7: printf("RF_PROTOCOL_EXCEPTION\n"); break; 
-                    case 8: printf("RF_FO_DETECTED\n"); break; 
+                    case 0: printf("DH Request\n"); break;
+                    case 1: printf("Endpoint Request\n"); break;
+                    case 2: printf("RF Link Loss\n"); break;
+                    case 3: printf("NFC Bad AFI\n"); break;
+                    case 4: printf("DH request failed due to error\n"); break;
+                    case 5: printf("RF_REMOTE_ENDPOINT_REMOVED\n"); break;
+                    case 6: printf("RF_TIMEOUT_EXCEPTION\n"); break;
+                    case 7: printf("RF_PROTOCOL_EXCEPTION\n"); break;
+                    case 8: printf("RF_FO_DETECTED\n"); break;
                     default: printf("[unknown]\n"); break;
                     }
                     break;

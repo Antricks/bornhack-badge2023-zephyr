@@ -274,7 +274,9 @@ class Nci {
     uint8_t rf_intf;
     uint8_t rf_techno_mode;
     uint8_t discovery_id;
-    uint8_t max_data_payload_size;
+
+    uint8_t max_data_payload_size = 255; //TODO CORE_INIT_RSP is weird, fixme
+    uint8_t max_ctrl_payload_size = 255; //TODO CORE_INIT_RSP is weird, fixme
 };
 
 // returns the expected overall length of an NCI packet according to packet header

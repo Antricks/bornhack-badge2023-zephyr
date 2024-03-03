@@ -95,7 +95,7 @@ class IsoDep : public Dep {
     int handle_apdu(const uint8_t *buf, size_t buf_len);
 
     uint8_t selected_application[32];
-    uint8_t selected_ef[8];
+    uint8_t selected_ef[32];
 
     uint8_t selected_application_len = 0;
     uint8_t selected_ef_len = 0;
